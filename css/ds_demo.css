@@ -1,0 +1,42 @@
+.ds-demo{
+    width: 800px;
+    margin: 0 auto; 
+    display: flex;
+    flex-direction: row;
+}
+
+.ds-demo-score{
+    width: 450px;
+    margin: 0 auto;
+}
+
+.ds-similarity-score {
+    width: 300px;
+    margin: 0 auto;
+}
+
+.ds-target {
+    width: 40%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.ds-compare {
+    width: 60%;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-around;
+}
+
+.compare-items {
+    width: 45%;
+    display: flex;
+    align-items: center;
+}
+
+.dss-demo-start {
+    padding: 6px 8px;
+    margin-top: 1.5rem;
+    outline: none;
+}

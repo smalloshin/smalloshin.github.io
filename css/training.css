@@ -1,0 +1,35 @@
+.training-container {
+    width: 800px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: center;
+    gap: 0 40px
+}
+
+
+.training-container #chart {
+    height: 21rem;
+    min-width: 40rem;
+}
+
+#training-control > * {
+    margin: 10px, 0;
+    display: block;
+}
+
+#training-control > select {
+    padding: 8px 6px;
+    font-size: 1rem;
+}
+
+#training-control > button {
+    padding: 6px 8px;
+    font-size: 1rem;
+    outline: none;
+}
+
+#training-control {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+}

@@ -1,0 +1,15 @@
+.yolo-deepsort-container {
+    width: 800px;
+    margin: 0 auto; 
+    display: flex;
+    justify-content: space-around;
+}
+
+.yd-select > select {
+    padding: 8px 6px;
+    font-size: 1rem;
+}
+
+.yd-select > select > option {
+    padding: 2px;
+}

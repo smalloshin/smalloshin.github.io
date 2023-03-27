@@ -1,0 +1,60 @@
+#yolo-cnn-container {
+    display: flex;
+    align-items: center;
+}
+
+#yolo-cnn-container #image-container {
+    width: 16em;
+}
+
+#yolo-cnn-container #color-palette {
+    width: 100%;
+    /* height: 6em; */
+    border-radius: 15px;
+    border: solid #11679a 1px;
+    padding: 10px;
+    /* display: flex;
+    flex-direction: column; */
+}
+
+#yolo-cnn-container #color-palette-conainer {
+    width: 100%;
+    padding: 5px 5px 0px;
+}
+
+#yolo-cnn-container #color-palette-conainer input[type=radio] {
+    display: none;
+}
+
+#yolo-cnn-container #color-palette-conainer input[type=radio]:not(:first-child) + label {
+    margin-left: 5px;
+}
+
+#yolo-cnn-container #color-palette-conainer label {
+    width: 1.3em;
+    height: 1.3em;
+    display: inline-block;
+    border-radius: 1em;
+    cursor: pointer;
+}
+
+#yolo-cnn-container #color-palette-conainer input[type=radio]:checked + label {
+    border: 3px solid rgba(134, 134, 134, 0.8);
+}
+
+#yolo-cnn-container #image-table {
+    margin-top: 10px;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+}
+
+#yolo-cnn-container tr,
+#yolo-cnn-container td,
+#yolo-cnn-container table {    
+    border: 1px solid;
+}
+
+#yolo-cnn-container #neural-network-container {
+    flex-grow: 1;
+    height: 40em;
+}

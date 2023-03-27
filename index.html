@@ -1,0 +1,1718 @@
+<!doctype html>
+<html lang="en">
+    <!-- 1m cron final testssssss -->
+<head>
+    <!-- Required meta tags for IEEE Xplore immersive article -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description"
+        content="An interactive article on using YOLO object detection and DeepSORT tracking algorithm to extract traffic volume from CCTV video recorded in a Transportation System. Learn how YOLO and DeepSORT work, and how to apply them in to a real-world scenario.">
+    <meta charset="utf8">
+    <title>Applying Object Tracking to Intelligent Transportation System
+    </title>
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+
+    <!-- Stylesheet for IEEE Xplore immersive article -->
+    <link rel="stylesheet" href="fonts/stylesheet.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/yolo_cnn.css">
+    <link rel="stylesheet" href="css/yolo_extract.css">
+    <link rel="stylesheet" href="css/yolo_iou.css">
+    <link rel="stylesheet" href="css/yolo_filter.css">
+    <link rel="stylesheet" href="css/ds_similarity.css">
+    <link rel="stylesheet" href="css/ds_demo.css">
+    <link rel="stylesheet" href="css/yolo_deepsort.css">
+    <link rel="stylesheet" href="css/introdction.css">
+    <link rel="stylesheet" href="css/training.css">
+    <link rel="stylesheet" href="css/annotation.css">
+    <link rel="stylesheet" href="css/hungarian.css">
+    <link rel="stylesheet" href="css/kf.css">
+    <link rel="stylesheet" href="css/track.css">
+
+    <link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css">
+    <script src="https://tikzjax.com/v1/tikzjax.js"></script>
+    <!-- MathJax javascript library and implementation file/s -->
+    <script type="text/javascript" async
+        src="https://xploreqa.ieee.org/xploreAssets/MathJax-274/MathJax.js?config=default">
+        </script>
+
+    <!-- Example chessboard immersive app -->
+    <script type="text/javascript" src="https://xploreqa.ieee.org/assets/vendor/jquery/jquery-3.5.1.min.js"></script>
+    <script type="text/javascript" src="chessboard/jquery-ui-1.13.2.min.js"></script>
+    <script type="text/javascript" src="./js/jquery.csv.min.js"></script>
+    <link rel="stylesheet" href="chessboard/jquery-ui.min.css">
+    <link rel="stylesheet" href="chessboard/chessboard.css">
+    <script type="text/javascript" src="chessboard/chessboard.js"></script>
+    <script src="./js/fabric.min.js.js"
+        integrity="sha512-P6uimDKoj1nnPSo2sPmgbZy99pPq9nHXhLwddOnLi1DC+fEM83FEUcHPRPifbx1rlRkdMinViaWyDfG45G9BuA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- <script src="js/onnx.min.js"></script> -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxjs@0.1.7/dist/onnx.min.js"></script>
+</head>
+
+<body>
+    <!-- Article with large top spacing -->
+    <article class="mt-lg">
+        <header>
+            <!-- Page container -->
+            <div class="container">
+                <!-- Page title -->
+                <h1>
+                    Applying Object Tracking to Intelligent Transportation System
+                </h1>
+                <!-- Subheading -->
+                <p class="subhead">
+                    An interactive article on using YOLO object detection and DeepSORT tracking algorithm
+                    to extract traffic volume from CCTV video recorded in a Transportation System. Learn
+                    how YOLO and DeepSORT work, and how to apply them in to a real-world scenario.
+                </p>
+                <!-- Header info general wrapper -->
+                <div class="header-info">
+                    <!-- Header left info box -->
+                    <div class="header-left box">
+                        <!-- Header authors section -->
+                        <div class="header-authors">
+                            <h2>Authors</h2>
+                            <ul>
+                                <!-- <li>Chou Kuan Chuan | National Chung Hsing University, Taiwan</li> -->
+                            </ul>
+                        </div>
+                        <!-- Published info section -->
+                        <div class="header-published">
+                            <!-- <h2>Published</h2>
+                            <p>Jan. 20, 2023</p> -->
+                        </div>
+                    </div>
+                    <!-- Header legend section -->
+                    <div class="header-legend">
+                        <svg class="click-icon" data-name="Click" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 83.62 122.88">
+                            <title>Click</title>
+                            <path
+                                d="M40.59,14.63a3.36,3.36,0,0,1-1,2.39l0,0a3.39,3.39,0,0,1-4.77,0,3.42,3.42,0,0,1-1-2.4V3.39A3.4,3.4,0,0,1,37.2,0a3.34,3.34,0,0,1,2.39,1,3.39,3.39,0,0,1,1,2.4V14.63Zm25,76.65a1.89,1.89,0,0,1,3.77,0V99.9a1.89,1.89,0,1,1-3.77,0V91.28ZM54.46,87.47a1.89,1.89,0,0,1,3.77,0V99.9a1.89,1.89,0,1,1-3.77,0V87.47Zm-28-7.63a1.92,1.92,0,0,1-.35-.23q-5.24-4.24-10.44-8.53a8.36,8.36,0,0,0-3.57-1.79,3.54,3.54,0,0,0-2,.09A2,2,0,0,0,9,70.49a6.9,6.9,0,0,0-.4,3.24,12.47,12.47,0,0,0,1.11,4,26.49,26.49,0,0,0,2.92,4.94l17.68,26.74a2.37,2.37,0,0,1,.36,1,15.28,15.28,0,0,0,1.87,6.4,2.89,2.89,0,0,0,2.57,1.46c9,0,18.62-.34,27.53,0a8.33,8.33,0,0,0,4.69-1.51,15,15,0,0,0,4.29-5l.34-.57c3.4-5.87,6.71-11.57,7-18.33L78.85,85l0-.33,0-1.84c.06-5.74.16-14.54-4.62-15.4H71.14c.09,2.46,0,5-.18,7.3-.08,1.36-.15,2.63-.15,3.79a2.31,2.31,0,1,1-4.62,0c0-1.1.08-2.52.17-4,.32-5.73.75-13.38-3.24-14.14h-3a2.2,2.2,0,0,1-.58-.07,69.07,69.07,0,0,1-.13,8.29c-.07,1.36-.15,2.63-.15,3.79a2.31,2.31,0,1,1-4.61,0c0-1.1.08-2.52.16-4,.33-5.73.76-13.38-3.24-14.14h-3a2,2,0,0,1-.6-.08V66a2.31,2.31,0,1,1-4.61,0V42c0-4-1.64-6.55-3.73-7.61a5.32,5.32,0,0,0-4.71-.06l-.1.06c-2.07,1-3.69,3.59-3.69,7.7v42a2.31,2.31,0,1,1-4.62,0V79.84Zm44.14-17a2.49,2.49,0,0,1,.61-.08h3.19a2.33,2.33,0,0,1,.53.06c8.73,1.4,8.61,12.65,8.52,20,0,3.4.14,6.78.18,10.17-.39,7.91-4,14.1-7.67,20.47l-.32.55A19.49,19.49,0,0,1,70,120.55a12.88,12.88,0,0,1-7.29,2.32H35.17a7.23,7.23,0,0,1-6.44-3.5,19,19,0,0,1-2.56-7.88L8.94,85.42A31,31,0,0,1,5.5,79.58,16.88,16.88,0,0,1,4,74a11.42,11.42,0,0,1,.8-5.42,6.54,6.54,0,0,1,3.55-3.49A8.05,8.05,0,0,1,13,64.76a13.19,13.19,0,0,1,5.61,2.77L26.45,74V42.09c0-6.1,2.73-10,6.22-11.82l.15-.06a9.81,9.81,0,0,1,4.33-1,10,10,0,0,1,4.49,1.07C45.16,32.06,47.91,36,47.91,42v7.6a2.41,2.41,0,0,1,.6-.08H51.7a2.33,2.33,0,0,1,.53.06c3.82.61,5.73,3.16,6.63,6.47a2.25,2.25,0,0,1,1.23-.36h3.18a2.26,2.26,0,0,1,.53.06c4.07.65,6,3.49,6.79,7.11ZM14.63,37A3.33,3.33,0,0,1,17,38a3.39,3.39,0,0,1-2.39,5.79H3.39a3.36,3.36,0,0,1-2.39-1A3.4,3.4,0,0,1,3.39,37ZM23,20.55a3.39,3.39,0,0,1-2.4,5.79,3.4,3.4,0,0,1-2.4-1l-7.91-7.94a3.42,3.42,0,0,1-1-2.4,3.39,3.39,0,0,1,5.79-2.4L23,20.55ZM59.2,43.81a3.41,3.41,0,0,1-3.4-3.4A3.41,3.41,0,0,1,59.2,37H70.43a3.35,3.35,0,0,1,2.4,1,3.4,3.4,0,0,1-2.4,5.79ZM55.62,24.74a3.39,3.39,0,0,1-4.8-4.8l7.91-8a3.39,3.39,0,0,1,4.8,4.8l-7.91,8Z" />
+                        </svg>
+                        <p>Indicates interactive elements</p>
+                    </div>
+                </div>
+                <!-- Box of anchored links -->
+                <div class="contents box">
+                    <h2>Contents:</h2>
+                    <ul>
+                        <li>
+                            <a href="#introduction">Introduction</a>
+                            <span class="separator">&nbsp;&nbsp;|&nbsp;&nbsp;</span>
+                        </li>
+                        <li>
+                            <a href="#yod">YOLO Object Detection</a>
+                            <span class="separator">&nbsp;&nbsp;|&nbsp;&nbsp;</span>
+                        </li>
+                        <li>
+                            <a href="#dta">DeepSORT Tracking Algorithm</a>
+                            <span class="separator">&nbsp;&nbsp;|&nbsp;&nbsp;</span>
+                        </li>
+                        <li>
+                            <a href="#fttrwa">From theory to real-world Application</a>
+                            <span class="separator">&nbsp;&nbsp;|&nbsp;&nbsp;</span>
+                        </li>
+                        <li><a href="#conclusion">Conclusion</a>
+                            <span class="separator">&nbsp;&nbsp;|&nbsp;&nbsp;</span>
+                        </li>
+                        <li><a href="#references">References</a></li>
+                    </ul>
+                </div>
+            </div>
+        </header>
+
+        <!-- Content container with large top spacing -->
+        <div class="container mt-lg">
+            <!-- Anchor ID -->
+            <section id="introduction">
+                <!-- Section title -->
+                <h2>I. Introduction</h2> (ai)
+                <p>
+                    The transportation system plays a critical role in modern society, but it
+                    is plagued by traditional problems such as non-adaptive traffic light
+                    control and traffic jams. Fortunately, advances in technology have enabled
+                    the development of high-end techniques that can help solve these problems.
+                    One such technique is the use of Object Tracking and Computational
+                    Technologies, which can make traffic light control more adaptable to road
+                    conditions. These technologies are collectively known as Intelligent
+                    Transportation Systems (ITS).
+                </p>
+                <p>
+                    As you drive your car and pass through a green traffic light at an
+                    intersection, you expect to reach your destination on time. However, the
+                    traffic lights turn red one by one, forcing you to stop at each intersection.
+                    Despite the lack of cars passing on the other side, you waste time waiting
+                    for the traffic light to turn green again. This is a common occurrence in
+                    our daily lives, highlighting the limitations of traffic light control in
+                    adapting to traffic conditions. To make traffic lights more adaptive, we
+                    need real-time traffic condition information for each intersection,
+                    including car flow information.
+                </p>
+                <p>
+                    Obtaining car flow information traditionally involves hiring people to
+                    stand by the roadside and count cars. This is a time-consuming and
+                    labor-intensive task that cannot be scaled up as the number of intersections
+                    increases. With the development of technology, we can now use Object
+                    Tracking to detect cars in an intersection and turn car tracks into useful
+                    car flow information for ITS.
+                </p>
+                <p>
+                    This work focuses on the application of Object Tracking to ITS.
+                    We will discuss the requirements for applying this technology to ITS and
+                    how it can be used to make traffic light control more adaptive below:
+                </p>
+
+                <ul>
+                    <li><strong>CCTV:</strong>
+                        this is an important component of the system as it provides the necessary
+                        visual data from the road. A CCTV camera can be installed to capture video footage
+                        of the intersection which can be processed by the Object Tracking algorithm.
+                    </li>
+                    <li><strong>Object Detection Algorithm:</strong>
+                        this technique enables the system to detect and identify objects in the video footage.
+                        In this work, YOLO, a state-of-the-art artificial intelligence model, is used as the Object
+                        Detection Algorithm. YOLO can detect multiple objects in real-time videos with high accuracy.
+                    </li>
+                    <li><strong>Tracking Algorithm:</strong>
+                        this algorithm tracks the objects detected by the Object Detection Algorithm across multiple
+                        frames in the video footage. DeepSORT is used as the tracking algorithm in this work. DeepSORT
+                        combines deep learning with the Simple Online and Realtime Tracking (SORT) method to track
+                        objects
+                        in the video footage.
+                    </li>
+                    <li><strong>Annotations:</strong>
+                        in order to train the Tracking Algorithm, annotations are required to label the video footage.
+                        Annotations help to identify the objects in the video footage accurately. Since the details
+                        captured in the video footage can vary from camera to camera, annotations can improve the
+                        performance of the Tracking Algorithm.
+                    </li>
+                    <li><strong>Algorithm Model Training:</strong>
+                        after the annotations are done, the training data is fed into the algorithm models.
+                        In this work, two models are trained - YOLO Object Detection and the "Deep" part of the
+                        DeepSORT Tracking Algorithm. The training data for YOLO is images with bounding box coordinates
+                        and object types, while the training data for DeepSORT is a series of images cropped by
+                        bounding box coordinates grouped by objects.
+                    </li>
+                    <li><strong>Vehicle Tracks Classification:</strong>
+                        once the Vehicle Tracks are obtained from the DeepSORT Tracking Algorithm, the next step is
+                        to extract useful information from the raw track data. Vehicle Tracks Classification enables
+                        the system to identify the direction in which the vehicles are moving, which can provide
+                        valuable insights for traffic management.
+                    </li>
+                </ul>
+                <figure class="text-center">
+                    <img src="img/ObjectTrackingWorkflow.svg" alt="Object Tracking Workflow" width="511" height="441">
+                    <figcaption><strong>Figure 1:</strong> Workflow Chart of Object Tracking in Intelligent
+                        Transportation System
+                    </figcaption>
+                </figure>
+                <p>
+                    You may attempt to solve this task using traditional methods, and may believe
+                    that it won't take too much time for a human to complete:
+                </p>
+                <div class="framed" style="margin-bottom: 20px">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            Introduction
+                        </div>
+                        <div class="text-center">
+                            <p><span id="description">To count the cars, click on the "Start" button and enter your answers in the table on the right-hand side.</span></p>
+                            <p><span id="intro-timer">0</span></p>
+                            <p></p>
+                        </div>
+                        <div class="introduction-container" style="position:relative">
+                            <div class="introduction-video">
+                                <!-- Right-up corner text -->
+                                <div style="justify-content: space-between; display: flex;">
+                                    <div>Up</div>
+                                    <div>Right</div>
+                                </div>
+                                <video class="video-frame" width="437" height="329" style="pointer-events:none;" muted>
+                                    <source src="data/introduction/Ko-PER_Intersection_Sequence1d_KAB_SK_1_undist.mp4" type="video/mp4">
+                                    Your browser does not support the video tag.
+                                </video>
+                                <div style="justify-content: space-between; display: flex;">
+                                    <div>Left</div>
+                                    <div>Down</div>
+                                </div>
+                            </div>
+                            <!-- Empty placeholder -->
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div class="count-table-frame" style="display:flex; flex-direction: column;">
+                                <table class="count-table" style="pointer-events:none; flex: 4; font-size: 0.8em; width:max(6vw, 300); height:(6vw, 300)">
+                                    <thead>
+                                        <tr>
+                                            <th></th>
+                                            <th>car</th>
+                                            <th>big car</th>
+                                            <th>motor bike</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody style="align-items: center;">
+                                        <tr class="count-ans">
+                                            <th>down to up</th>
+                                            <td><input type="number" value="0" data-ans="28"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                        </tr>
+                                        <tr class="count-ans">
+                                            <th>up to down</th>
+                                            <td><input type="number" value="0" data-ans="27"></td>
+                                            <td><input type="number" value="0" data-ans="3"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                        </tr>
+                                        <tr class="count-ans">
+                                            <th>down to right</th>
+                                            <td><input type="number" value="0" data-ans="3"></td>
+                                            <td><input type="number" value="0" data-ans="1"></td>
+                                            <td><input type="number" value="0" data-ans="1"></td>
+                                        </tr>
+                                        <tr class="count-ans">
+                                            <th>down to left</th>
+                                            <td><input type="number" value="0" data-ans="1"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                        </tr>
+                                        <tr class="count-ans">
+                                            <th>up to right</th>
+                                            <td><input type="number" value="0" data-ans="1"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                        </tr>
+                                        <tr class="count-ans">
+                                            <th>up to left</th>
+                                            <td><input type="number" value="0" data-ans="3"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <div class="count-btn-container" style="flex: 1;">
+                                    <button class="count-btn" style="width:5em; font-weight: bold;">Start</button>
+                                </div>
+                            </div>
+                            
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 2:</b>Introduction</div>
+                        <script src="js/introduction.js"></script>
+                    </div>
+                </div>
+                <p>
+                    1. Component Introduction:
+                    A component can let user count the number of cars in each
+                    direction.
+                </p>
+
+                <p>
+                    2. User's Experience:
+                    User will get known to the car direction counting job in
+                    Intelligence Transportation System.
+                </p>
+
+                <p>
+                    3. How to use?:
+                    Press the start button in the left side video segment, then
+                    the video will start to play. User need to count the number
+                    of cars in each direction and input the number in the table
+                    in the right side. After user finish counting, press the
+                    done button to check the answer. Right answer will be in
+                    green color, wrong answer will be in red color.
+                </p>
+
+                <p>
+                    4. What user will learn?:
+                    User will realize although the task is simple, it is not
+                    easy to do it after doing it for a while. And they will know
+                    that if they want this job be apply to the transportation
+                    system, they will need to do this every intersections, and
+                    they will need to do this every day. So they will know how
+                    it's important to use computer to do this job.
+                </p>
+            </section>
+
+
+
+            <section id="yod">
+                <h2>II. YOLO Object Detection</h2> (ai)
+                <p>
+                    The first step in extracting traffic flow information from the video is to locate the cars, which is
+                    where object detection algorithms come into play. Object detection is the task of identifying the
+                    location of objects in an image and classifying them into different categories. The task can be
+                    divided into two sub-tasks: object localization and object classification. While human beings can
+                    easily identify objects in an image, we can refer to the process of how humans identify objects to
+                    better understand object detection:
+                </p>
+
+                <!-- hobd:Human object detection -->
+                <ol>
+                    <li id="hobd_1">When we see an object, our brains first try to separate the object from the
+                        background by identifying its outline.</li>
+                    <li id="hobd_2">Once we have identified the object's outline, we then extract its features and try
+                        to match them with known patterns to determine what the object is.</li>
+                    <li id="hobd_3">
+                        After we have matched the object's features with known patterns, we can classify the object
+                        based on its features.
+                    </li>
+                    <li id="hobd_4">
+                        However, sometimes we may perceive illusions or misidentify objects. To account for this, we
+                        apply multiple checks to determine the likelihood of an object's existence in a particular area,
+                        and we use our prior experiences to filter out low-confidence objects.
+                    </li>
+                </ol>
+                <p>
+                    In this project, we use the YOLO (You Only Look Once) Object Detection algorithm as our detector to
+                    identify the position of cars and classify them. YOLO is a real-time object detection algorithm that
+                    is based on a Convolutional Neural Network (CNN), which is a deep learning model that simulates the
+                    way humans think about an image. Like the human brain, YOLO first separates the objects from the
+                    background by identifying their outlines, and then it extracts their features to match them with
+                    known patterns to determine what the object is. By applying multiple checks and prior experiences,
+                    YOLO filters out low-confidence objects and accurately identifies the positions of cars in the
+                    video.
+                </p>
+
+                <!-- yolop:YOLO process -->
+                <ol>
+                    <li class="inline-math" id="yolop_1">When given an image, YOLO takes each pixel's RGB color as input
+                        to its Convolutional Neural Network (CNN) model. Each color (e.g. red represented as $(255, 0,
+                        0)$) is converted to a numerical value.</li>
+                    <li id="yolop_2">
+                        The first step of the CNN process is similar to the first step (<a href="#hobd_1">hobd_1</a>)
+                        for a human identifying an object. YOLO applies a series of filters to the image to enhance the
+                        object's outline. This means that YOLO is extracting "outline" features of the object.
+                    </li>
+                    <li id="yolop_3">
+                        YOLO's CNN applies multiple filter layers to the image. Each filter layer extracts more complex
+                        features from the previous layer. Eventually, the final output of the CNN is a feature map that
+                        represents the probability of objects of different classes being present in the image. This can
+                        be thought of as a combination of steps two and three (<a href="#hobd_2">hobd_2</a> and <a
+                            href="#hobd_3">hobd_3</a>) in human object detection. With this, YOLO can both locate and
+                        classify objects.
+                    </li>
+                    <li id="yolop_4">
+                        After identifying the position and class of an object, YOLO generates a Bounding Box (bbox)
+                        around the object. The bbox includes YOLO's confidence score, which indicates the likelihood
+                        that an object is present within the bbox. YOLO can then filter out low confidence objects by
+                        setting a threshold for confidence. This is similar to the fourth step (<a
+                            href="#hobd_4">hobd_4</a>) in human object detection, where humans may ignore certain areas
+                        based on experience and probability.
+                    </li>
+                </ol>
+
+                <p>
+                    Now that we've covered the basics of object detection and how YOLO works, you can try your hand at
+                    the task below and see if you can outperform YOLO:
+                </p>
+
+                <!-- Interactive frame -->
+                <div class="framed" style="margin-bottom: 20px">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            Simple Annotation
+                        </div>
+                        <div class="annotation-container">
+                            <div id="tip">
+                                <div class="text-center">
+                                    <span id="tip-start"><p>Click the start button to annotating the car in the image.</p></span>
+                                    <span id="tip-finish">
+                                        <p>Click the finish button when you're done.</p>
+                                        <p>Click on the canvas to draw a bounding box around the car, and select the car type.</p>
+                                    </span>
+                                    <p><span id="totalSec"></span></p>
+                                    <p><span id="timer"></span></p>
+                                    <button id="btn-start">Start</button>
+                                    <button id="btn-finish">Finish</button>
+                                </div>
+                            </div>
+                            <div class="sub-container">
+                                <div id="overlay"></div>
+                                <div class="canvas-wrapper">
+                                    <canvas id="annotation-canvas" width="656" height="494"></canvas>
+                                </div>
+                                <table id="labels">
+                                    <tr>
+                                        <td>ID</td>
+                                        <td>label</td>
+                                    </tr>
+                                </table>
+                            </div>
+                            <div class="sub-container" id="yolo-result">
+                                <p style="margin-bottom: 0;">YOLO time: 0.077s</p>
+                                <div class="canvas-wrapper">
+                                    <canvas id="yolo-canvas" width="656" height="494"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 3:</b>Simple Annotation</div>
+                        <script src="js/annotation_simple.js"></script>
+                    </div>
+                </div>
+
+                <p>
+                    1. Component Introduction:
+                    A component can let user to annotate out the car in the image.
+                    We will time how long it takes for user to finish the annotation,
+                    and compare it with YOLO's time.
+                </p>
+
+                <p>
+                    2. User's Experience:
+                    User will know what YOLO's job is by doing simple annotation.
+                </p>
+
+                <p>
+                    3. How to use?:
+                    Press the start button to start the annotation. Then, user can
+                    draw a bbox around the car, select the car's class on the right
+                    side, and so on.
+                    When user finish the annotation, press the finish button to
+                    submit the result.
+                </p>
+
+                <p>
+                    4. What user will learn?:
+                    User will it is not easy to do YOLO's job. An it is labor-intensive
+                    and time-consuming job, so they will discover the importance of
+                    let YOLO do the job for human.
+                </p>
+
+
+                <h3>Convolutional Neural Network</h3> (ai)
+                <p>Convolutional Neural Network (CNN) is the core of every object detection algorithm. It is a type of
+                    deep learning model that can be trained to extract an object's features from an image. However, CNN
+                    does not actually see an image. Instead, it only sees a series of numbers. These numbers represent
+                    the RGB values of every pixel in the image (as shown in YOLO process step <a
+                        href="#yolop_1">one</a>). By transforming the image into a series of numbers, the task of image
+                    detection can be solved mathematically, and computers can perform the task for us.</p>
+                <p>To understand how CNN works, we can compare it to the neural structure in the human brain. Each layer
+                    of CNN is composed of neurons that work in parallel, with neurons connected between layers. The
+                    connections between neurons apply functions such as multiplication and addition. After the
+                    computations, the output results are generated, such as bounding box position and object class.
+                    Below, you can try changing the input pixel colors to see how the output of CNN changes. This
+                    particular CNN is trained to identify the patterns of "T" or "L".</p>
+
+                <!-- Interactive frame -->
+                <div class="framed" style="margin-bottom: 20px">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            YOLO Convolutional Neural Network
+                        </div>
+                        <div class="text-center">
+                            <span><p>Select Color in the Color platette left hand side</p></span>
+                            <span><p>And see different on the right hand side, the CNN will identify the pattern you draw.</p></span>
+                        </div>
+                        <div id="yolo-cnn-container">
+                            
+                            <div id="image-container">
+                                <div id="color-palette">
+                                    <div>Color-platette</div>
+                                    <div id="color-palette-conainer"></div>
+                                </div>
+                                <table id="image-table"></table>
+                            </div>
+                            <div id="neural-network-container"></div>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 4:</b> YOLO Convolutional Neural Network </div>
+                        <script src="https://d3js.org/d3.v7.min.js"></script>
+                        <script src="js/yolo_cnn.js"></script>
+                    </div>
+                </div>
+                <p>
+                    1. Component Introduction:
+                    A component can let user know how CNN work. User can change
+                    the input pixel color to see how the output of CNN change.
+                </p>
+
+                <p>
+                    2. User's Experience:
+                    User will know how the pixel color will affect the output of
+                    CNN. They will simply know what CNN is.
+                </p>
+
+                <p>
+                    3. How to use?:
+                    Select the color on the color palette, and click the pixel
+                    you want to change the color. Then, the output of CNN will
+                    change to L or T in real time.
+                </p>
+
+                <p>
+                    4. What user will learn?:
+                    User will know although CNN in most of the time is accurate,
+                    but it is not perfect. In the process they will learn sometimes
+                    CNN will make mistake if the input with noise.
+                </p>
+
+                <h3>Feature Extraction</h3> (ai)
+                <p>
+                    CNNs perform a series of complex calculations on the input image to extract meaningful features. One
+                    of the primary operations performed by CNNs is matrix convolution, which involves sliding a filter
+                    matrix over the input matrix and computing the element-wise product of the filter and input
+                    matrices, followed by summing up the results. For example, given an input matrix:
+                </p>
+                <p class="inline-math">
+                    $$
+                    \begin{bmatrix}
+                    1 & 2 & 3 \\
+                    4 & 5 & 6 \\
+                    7 & 8 & 9 \\
+                    \end{bmatrix}
+                    $$
+                </p>
+                <p>
+                    and a filter matrix:
+                </p>
+                <p class="inline-math">
+                    $$
+                    \begin{bmatrix}
+                    1 & 2 \\
+                    3 & 4 \\
+                    \end{bmatrix}
+                    $$
+                </p>
+                <p>
+                    we can perform matrix convolution to obtain the output matrix:
+                </p>
+                <p class="inline-math">
+                    $$
+                    \begin{bmatrix}
+                    37 & 47 \\
+                    67 & 77 \\
+                    \end{bmatrix}
+                    $$
+                </p>
+                <p>
+                    In this example, the output element in the first row and first column (i.e., 37) is obtained by
+                    computing the element-wise product of the input matrix and the filter matrix, as shown below:
+                </p>
+                <p class="inline-math">
+                    $$
+                    \begin{bmatrix}
+                    1 & 2\\
+                    4 & 5\\
+                    \end{bmatrix}
+                    \ast
+                    \begin{bmatrix}
+                    1 & 2\\
+                    3 & 4\\
+                    \end{bmatrix}
+                    =
+                    \begin{bmatrix}
+                    (1\times1)+(2\times3) & (1\times2)+(2\times4)\\
+                    (4\times1)+(5\times3) & (4\times2)+(5\times4)\\
+                    \end{bmatrix}
+                    =
+                    \begin{bmatrix}
+                    37 & 47 \\
+                    67 & 77 \\
+                    \end{bmatrix}
+                    $$
+                </p>
+                <p>
+                    Performing matrix convolution multiple times with different filters helps the CNN extract different
+                    features from the input image. These features are then passed to the subsequent layers of the
+                    network for further processing and analysis.
+                </p>
+
+                <p>
+                    Convolution plays a crucial role in object detection with CNN. When CNN needs to extract feature
+                    information of objects from an image, it can scan the image with a filter matrix to enhance the area
+                    containing the object while obscuring other areas. For instance, to extract the upper and lower
+                    bounds of a square from an image, a filter matrix can be used to scan the image. The example below
+                    demonstrates this process:
+                    $$
+                    \begin{bmatrix}
+                    27 & 15 & 9 & 4 & 5 & 7 & 3 & 8 & 24 & 19 \\
+                    5 & 27 & 19 & 11 & 8 & 29 & 25 & 11 & 29 & 2 \\
+                    24 & 9 & 9 & 27 & 2 & 26 & 19 & 4 & 20 & 9 \\
+                    15 & 25 & 23 & 246 & 245 & 246 & 252 & 15 & 29 & 8 \\
+                    15 & 29 & 9 & 253 & 246 & 246 & 252 & 24 & 27 & 26 \\
+                    2 & 29 & 15 & 247 & 250 & 253 & 249 & 11 & 10 & 21 \\
+                    18 & 13 & 29 & 253 & 249 & 252 & 251 & 9 & 8 & 11 \\
+                    8 & 11 & 3 & 12 & 16 & 10 & 2 & 23 & 17 & 3 \\
+                    3 & 9 & 16 & 23 & 2 & 11 & 13 & 20 & 24 & 28 \\
+                    28 & 24 & 1 & 10 & 22 & 4 & 17 & 21 & 6 & 19 \\
+                    \end{bmatrix}
+
+                    \ast
+
+                    \begin{bmatrix}
+                    1 & 2 & 1 \\
+                    0 & 0 & 0 \\
+                    -1 & -2 & -1 \\
+                    \end{bmatrix}
+
+                    =
+                    $$
+                    $$
+                    \begin{bmatrix}
+                    9 & -17 & -20 & -39 & -32 & -31 & -8 & 18 \\
+                    -12 & -237 & -476 & -689 & -681 & -448 & -231 & -10 \\
+                    -11 & -246 & -470 & -690 & -697 & -473 & -260 & -44 \\
+                    17 & 3 & 2 & -13 & -9 & 0 & 26 & 10 \\
+                    -7 & -4 & -23 & -9 & -8 & 10 & 35 & 49 \\
+                    24 & 265 & 481 & 712 & 724 & 478 & 228 & -1 \\
+                    32 & 247 & 490 & 718 & 726 & 468 & 211 & -44 \\
+                    -31 & -9 & -2 & 2 & -15 & -7 & -2 & -3 \\
+                    \end{bmatrix}
+                    $$
+
+                    Figure 2 shows a visualization of this example with the input matrix, filter matrix, and output
+                    matrix in grayscale:
+
+                <figure class="text-center">
+                    <img src="img/feature_extraction/input.png" alt="Input matrix in gray scale view" width="231"
+                        height="231">
+                    <img src="img/feature_extraction/filter.png" alt="Filter matrix in gray scale view" width="231"
+                        height="231">
+                    <img src="img/feature_extraction/output.png" alt="Output matrix in gray scale view" width="231"
+                        height="231">
+                    <figcaption><strong>Figure 5:</strong> Matrix Visualization</figcaption>
+                </figure>
+                </p>
+                <p>
+                    This process of object detection using CNNs is similar to the <a href="#hobd_2">second</a> and <a
+                        href="#hobd_3">third</a> steps a human would take to identify an object. In YOLO, CNNs use this
+                    technique to both locate and classify objects. To better understand the impact of feature extraction
+                    on object detection, we have prepared a real image below to demonstrate the process of feature
+                    extraction. We have used four different filters from a real DeepSORT trained model's first layer.
+                    You can choose which filter to apply using the slider, allowing you to see the image before and
+                    after the filter is applied. This interactive demonstration will help you gain insight into how
+                    feature extraction affects object detection. Try dragging the slider and selecting a filter from the
+                    dropdown menu to see the difference:
+                </p>
+                <div class="framed" style="margin-bottom: 20px">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            YOLO Extract feature from image (apply filter)
+                        </div>
+                        <div class="yolo-extract-container">
+                            <div class="yolo-extract-image">
+                                <div class="img background-img"></div>
+                                <div class="img foreground-img"></div>
+                                <input type="range" min="1" max="100" value="50" id="slider" class="slider"
+                                    name="slider">
+                                <div class='slider-button'></div>
+                            </div>
+                            <div class="yolo-extract-filter">
+                                <select name="filter" id="filter"></select>
+                                <div class="filter-box">
+                                    <img class="filter" src="img/filter/filter1.jpg"></img>
+                                    <p class="filter-text">filter matrix</p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 6:</b> YOLO Extract feature from image (apply filter)</div>
+                        <script src="js/yolo_extract.js"></script>
+                    </div>
+                </div>
+                <p>
+                    1. Component Introduction:
+                    A component can let user try to do convolution operation on
+                    image. User can choose the image and filter matrix to
+                    convolution. The result will be shown when user drag the
+                    slider.
+                </p>
+
+                <p>
+                    2. User's Experience:
+                    User will know how the convolution operation do on image,
+                    and they can see after convolution, the image's edge will
+                    be prominent.
+                </p>
+
+                <p>
+                    3. How to use?:
+                    Select the filter matrix, and drag the slider to see the
+                    result.
+                </p>
+
+                <p>
+                    4. What user will learn?:
+                    User will discover the convolution operation can extract
+                    the feature from image, but the result may not always
+                    extracted the feature usable for indentifying object.
+                </p>
+
+
+                <h3>IOU Confidence and Label Prediction</h3> (ai)
+                <p>
+                    In the previous section, we learned how to extract low-level features, such as object edges, from an
+                    image. In this section, we will explore higher-level features that can provide more information
+                    about the object, such as its type and the probability of it being present in the image.
+                </p>
+                <p>
+                    Unlike the edge features from the previous section, these higher-level features can be easier to
+                    understand when visualizing them. They detect patterns in the image and provide useful information
+                    about the object. In this section, we will show four different feature maps that highlight different
+                    patterns of the object. You can use these feature maps to guess the object's position by drawing a
+                    bounding box on a canvas. We will then tell you the IoU (Intersection over Union) of your bounding
+                    box and the object's true position bounding box. The IoU is a metric that measures the ratio of
+                    overlap between two bounding boxes. The higher the IoU, the more overlap between the two bounding
+                    boxes.
+                </p>
+
+                <p>
+                    In general, an IoU score above 0.5 is considered a good match. The IoU score is calculated using the
+                    following formula:
+                    $$IoU = \frac{Area\ of\ Overlap}{Area\ of\ Union}$$
+                    Although the formula looks simple, it can be difficult to visualize. The following figure
+                    illustrates the calculation of IoU to help you better understand it:
+                </p>
+
+                <figure class="text-center">
+                    <img src="img/iou/iou_visualizations.jpg" alt="IoU visualization" width="864" height="626">
+                    <figcaption><strong>Figure 7:</strong> IoU visualization</figcaption>
+                </figure>
+
+                <p>
+                    Now, let's try to identify the object's type and location from the feature maps shown below. We will
+                    provide you with the IoU score of your identified location and type, and let you know if your
+                    identification is correct:
+                </p>
+                <p>
+                    Hint: The feature map on the top left corner may indicate the probability of a scooter, while the
+                    feature maps on the top right and bottom left corners may indicate the probability of a car. The
+                    feature map on the bottom right corner may indicate the probability of a large vehicle.
+                </p>
+
+                <div class="framed" style="margin-bottom: 20px">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            YOLO IOU confidence and Label Predict
+                        </div>
+                        <div class="text-center"> 
+                            <p>Drag on blank canvas left hand side to guess the object's position, and submit to see the result.</p>
+                            <p>The following is four feature maps indicates the probability of object exist, try to find the object!</p>
+                            <span>Don't forget to guess the object type!</span>
+                            <p></p>
+                        </div>
+                        <div class="yolo-iou-container">
+                            <div class="iou-img">
+                                <img src="./img/test.png" alt="">
+                            </div>
+                            <div class="user-iou">
+                                <canvas id="iou-canvas" class="iou-canvas" width="384" height="145"></canvas>
+                                <div>
+                                    <p>IoU = <span id="iou-result"> To be calculated...</span></p>
+                                    <label for="iou-class"><p>Select object type: </p></label>
+                                    <select name="iou-class" id="iou-class"  ></select>
+                                    <p id="iou-result-correct"></p>
+                                    <button class="iou-btn">Submit</button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 8:</b>YOLO IoU confidence and Label Predict</div>
+                        <script src="js/yolo_iou.js"></script>
+                    </div>
+                </div>
+
+                <p>
+                    1. Component Introduction:
+                    A component can let user try to identified the object
+                    position and label the object from feature maps. User
+                    will see 4 feature maps from YOLO, and they will learn
+                    where the object is and what the object is from feature
+                    maps through the process.
+                </p>
+
+                <p>
+                    2. User's Experience:
+                    User will know how YOLO identify the object with the image
+                    that is be doing convolution operation.
+                </p>
+
+                <p>
+                    3. How to use?:
+                    User will draw the bbox on the blank canva, and we will
+                    calculate the IOU between user's bbox and real object.
+                    User will also try to label the object from feature maps
+                    they see, and we will tell user right or wrong.
+                </p>
+
+                <p>
+                    4. What user will learn?:
+                    They will learn what information contained in feature
+                    maps, and how YOLO identify the object with those
+                    feature maps. And know it's need training to get the
+                    right label and bbox.
+                </p>
+
+
+                <h3>Filtering False Positives with Confidence Threshold</h3> (not ai)
+                <p>
+                    Now that we have learned how YOLO predicts the position and label of objects in an image,
+                    let's take a closer look at the results it produces. However, YOLO is prone to producing
+                    false positives, which are bounding boxes that do not actually contain an object. To
+                    address this issue, we can filter out false positives by setting a confidence threshold
+                    for the predicted bounding boxes.
+                </p>
+                <p>
+                    YOLO calculates a confidence score for each bounding box it predicts, based on the IoU
+                    metric we learned about earlier. We can set a minimum threshold for the confidence score,
+                    and discard any bounding boxes with scores below this threshold. By doing so, we can improve
+                    the accuracy of the object detection results.
+                </p>
+                <p>
+                    In the interactive element below, you can adjust the confidence threshold and see how it
+                    affects the predicted bounding boxes. Try dragging the scroll bar to adjust the threshold
+                    and observe how the false positives are filtered out as the threshold increases.
+                </p>
+
+                <div class="framed" style="margin-bottom: 20px; width:1300px;">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            Filtering False Positives with Confidence Threshold
+                        </div>
+                        <div class="text-center">
+                            <p>Drag the slider to set the threshold of confidence, set it to proper value.</p>
+                        </div>
+                        <div class="yolo-filter-container">
+                            <canvas id="f" width="1280" height="360"></canvas>
+                            <div class="filter-control">
+                                <input type="range" name="fliter-bar" id="filter-bar" min="0" max="1" step="0.01">
+                                <label for="filter-bar" class="threshold-text">Confidence: 0.5</label>
+                            </div>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 9:</b>Filtering False Positives with Confidence Threshold</div>
+                        <script src="js/yolo_filter.js"></script>
+                    </div>
+                </div>
+                <p>
+                    1. Component Introduction:
+                    A component can let user try to filter out the low confidence bbox.
+                    User can adjust the threshold of confidence, and the number of bbox
+                    will change in real time.
+                </p>
+                <p>
+                    2. User's Experience:
+                    User will know it is important to set the threshold of confidence,
+                    and how to set the threshold of confidence according to the result
+                    YOLO give.
+                </p>
+                <p>
+                    3. How to use?:
+                    User can adjust the threshold of confidence by the scroll bar, and
+                    the number of bbox will change in real time.
+                </p>
+                <p>
+                    4. What user will learn?:
+                    They will learn how to set the threshold of confidence according to
+                    the result YOLO give. And know that it is hard to set a perfect
+                    threshold of confidence because it might too high to filter in the
+                    right bbox or too low to filter out the wrong bbox.
+                </p>
+
+
+            </section>
+
+
+
+            <section id="dta">
+                <h2>III. DeepSORT Tracking Algorithm</h2> (not ai)
+                <p>
+                    In the previous section, we discussed how to detect objects in a video frame using YOLO Object
+                    Detection. However, to obtain useful data for Intelligent Transportation Systems (ITS), we need to
+                    track the detected objects and obtain information on their flow. To achieve this, we can concatenate
+                    bounding boxes from different frames, and this process is known as tracking.
+                </p>
+                <p>
+                    In this section, we introduce the DeepSORT algorithm, which combines deep learning with traditional
+                    techniques for tracking. This algorithm achieves high tracking accuracy and robustness in complex
+                    scenarios. DeepSORT is an improvement on the Simple Online and Realtime Tracking (SORT) algorithm, a
+                    traditional tracking algorithm that can't handle occlusion. Occlusion refers to situations where an
+                    object is covered by other objects, causing track fragmentation or track loss. DeepSORT addresses
+                    this issue by using a deep learning model to score the similarity between the object in the current
+                    frame and the object in the previous frame.
+                </p>
+                <p>
+                    DeepSORT employs three core techniques:
+                <ul>
+                    <li><strong>Kalman Filter:</strong> an algorithm used in SORT to predict the object's position in
+                        the next frame. Kalman Filter estimates the object's position by using the object's position and
+                        velocity in the current frame.</li>
+                    <li><strong>Appearance Feature:</strong> the key idea of DeepSORT. It uses a deep learning model
+                        called ReID (short for "re-identification") to score the object's similarity based on appearance
+                        features. The ReID model is trained to classify an object's appearance.</li>
+                    <li><strong>Hungarian Algorithm:</strong> an algorithm used to match objects in the current frame
+                        with objects in the previous frame when it is challenging to match them using scores from Kalman
+                        Filter and ReID model.</li>
+                </ul>
+                </p>
+                <p>
+                    To help you understand how DeepSORT works, we have provided an interactive element where you can
+                    identify the right objects from six objects in each round. The target object is shown on the left,
+                    and six objects to be identified are shown on the right. Check the checkbox of the correct object
+                    and click the "Submit" button to submit your answer. If you check the wrong object, the checkbox
+                    will turn red, and the correct object will turn green. Let's try it out:
+                </p>
+
+                <div class="framed" style="margin-bottom: 20px">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            DeepSORT Demo
+                        </div>
+                        <div class="ds-demo">
+                            <div class="ds-target" style="visibility: hidden; display:flex;">
+                                <p>Target</p>
+                                <img src="" alt="">
+                            </div>
+                            <div class="ds-compare" style="visibility: hidden; display : flex; ">
+                                <div class="compare-items">
+                                    <img src="">
+                                    <input type="checkbox" name="compare">
+                                </div>
+                                <div class="compare-items">
+                                    <img src="">
+                                    <input type="checkbox" name="compare">
+                                </div>
+                                <div class="compare-items">
+                                    <img src="">
+                                    <input type="checkbox" name="compare">
+                                </div>
+                                <div class="compare-items">
+                                    <img src="">
+                                    <input type="checkbox" name="compare">
+                                </div>
+                                <div class="compare-items">
+                                    <img src="">
+                                    <input type="checkbox" name="compare">
+                                </div>
+                                <div class="compare-items">
+                                    <img src="">
+                                    <input type="checkbox" name="compare">
+                                </div>
+                            </div>
+                            <p> </p>
+                            <p> </p>
+                            <div style="display: block">
+                                <button class="demo-next">START</button>
+                            </div>
+                        </div>
+                        <div class="ds-demo-score" style="display: none;">
+                            <p>Your accuracy: <span id="ds-demo-acc1">0</span>/10 (<span id="ds-demo-acc2">0</span>%)</p>
+                            <p>This is what DeepSORT doing, hope you to know it more!</p>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 10:</b>DeepSORT Demo</div>
+                        <script src="js/ds_demo.js"></script>
+                    </div>
+                </div>
+                <p>
+                    1. Component Introduction:
+                    A component can let user try to filter out the low confidence bbox.
+                    User can adjust the threshold of confidence, and the number of bbox
+                    will change in real time.
+                </p>
+                <p>
+                    2. User's Experience:
+                    User will know it is important to set the threshold of confidence,
+                    and how to set the threshold of confidence according to the result
+                    YOLO give.
+                </p>
+                <p>
+                    3. How to use?:
+                    User can adjust the threshold of confidence by the scroll bar, and
+                    the number of bbox will change in real time.
+                </p>
+                <p>
+                    4. What user will learn?:
+                    They will learn how to set the threshold of confidence according to
+                    the result YOLO give. And know that it is hard to set a perfect
+                    threshold of confidence because it might too high to filter in the
+                    right bbox or too low to filter out the wrong bbox.
+                </p>
+                <h3>Kalman Filter</h3> (ai)
+                <p>
+                    All the object tracking algorithms we have discussed so far rely on the Kalman Filter, a state
+                    estimator used for predicting future values based on past observations. It can estimate the state of
+                    any numerical value, such as the temperature of a room, the position of a car, the velocity of a
+                    ball, and more.
+                </p>
+                <p>
+                    In object tracking, the Kalman Filter is used to estimate the position of an object in the next
+                    frame. It utilizes the object's current position and velocity to make this estimation.
+                </p>
+
+                <p>
+                    The following interactive element demonstrates how the Kalman Filter works. Click the "Start" button
+                    to begin. The canvas displays bounding boxes, where the red bbox represents the target object's
+                    bbox, and it also shows the velocity in vector form. The length of the vector represents the
+                    object's speed. Draw the estimated bbox of the target object in the canvas. Try it out:
+                </p>
+
+                <div class="framed" style="margin-bottom: 20px;">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            Kalman filter
+                        </div>
+                        <div class="kf-container">
+                            <p>Frame: <span id="kf-frame">0</span></p>
+                            <canvas id="kf-canvas" width="900" height="450"></canvas>
+                            <button id="kf-btn">Start</button>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 11:</b>Kalman Filter</div>
+                        <script src="js/kalman_filter.js"></script>
+                    </div>
+                </div>
+                <p>
+                    1. Component Introduction:
+                    The purpose of this component is to help users learn how the Kalman Filter
+                    works by drawing the estimated bbox of a moving object. The component
+                    will show previous bbox around the object and vectors indicating
+                    its speed in previous frame, user need to guess the next bbox of the
+                    target object.
+                </p>
+                <p>
+                    2. User's Experience:
+                    They will learn how the Kalman Filter predict the next bbox of the
+                    target object by drawing the estimated bbox of target object.
+                </p>
+                <p>
+                    3. How to use?:
+                    User will see bunch of bbox in the canvas, user need to guess the
+                    next bbox of the target object by drawing the estimated bbox. The
+                    speed of the target object will be shown by the vector. User will
+                    see vector start from 2nd frame.
+                </p>
+                <p>
+                    4. What user will learn?:
+                    They will learn the way how the Kalman Filter predict the next bbox
+                    is similar to the way we predict the next bbox of the target object.
+                </p>
+
+
+
+                <h3>Similarity Score</h3> (not ai)
+                <p>
+                    In contrast to the SORT algorithm, DeepSORT uses a similarity score produced by a deep learning
+                    model to determine whether an object in the current frame is the same as an object in the previous
+                    frame after position prediction. This is the reason for the "Deep" in the name DeepSORT. The
+                    similarity score is a measure of how similar two objects are in appearance.
+                </p>
+
+                <h3>Hungarian Algorithm</h3> (ai)
+                <p>
+                    Once the similarity score and position prediction are done, most objects can be successfully
+                    associated with high similarity scores and close position predictions. However, there will be some
+                    objects left behind, either due to low similarity scores or inaccurate position predictions. In such
+                    cases, we need to pair the remaining objects or decide which object should start a new track.
+                </p>
+                <p>
+                    To solve this problem, we use the Hungarian Algorithm, which is a method to solve the assignment
+                    problem. The assignment problem is to find the best way to assign N workers to N jobs with a cost
+                    matrix. We can also view object pairing as an assignment problem, where we need to find the best way
+                    to pair all objects in the current frame with objects in the previous frame. The cost matrix is
+                    generated using the similarity score and position prediction. If the number of objects in the
+                    current frame is different from the previous frame, we need to add dummy objects to make the cost
+                    matrix square, representing the new objects or missing objects in the current frame.
+                </p>
+                <p>
+                    How does the Hungarian Algorithm pair objects using the cost matrix? Three steps need to be
+                    followed: row reduction, column reduction, and finding the minimum line that covers all zeros. Row
+                    reduction involves reducing the value of each row to the minimum value. Column reduction involves
+                    reducing the value of each column to the minimum value. After row or column reduction, we need to
+                    find the minimum line that covers all zeros. If the line number is equal to the number of objects in
+                    the current frame, then we can pair the objects. If the line number is less than the number of
+                    objects in the current frame, we need to perform row or column reduction again.
+                </p>
+                <p>
+                    Here is an example of the Hungarian Algorithm. The cost matrix is 6 x 6, the number of objects in
+                    the current frame is 6, and the number of objects in the previous frame is 6. A low value in the
+                    cost matrix indicates that two objects are similar and close to each other, whereas a high value
+                    means that two objects are different and far away from each other. In the following interactive
+                    element, you can try performing the row reduction, column reduction, and finding the minimum line
+                    that covers all zeros yourself. Let's try it:
+                </p>
+                <div class="framed" style="margin-bottom: 20px">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            Hungarian Algorithm
+                        </div>
+                        <div class="hungarian-container">
+                            <div id="hungarian-result" style="display: none;">
+                                <p>A' → F</p>
+                                <p>B' → A</p>
+                                <p>C' → E</p>
+                                <p>D' → D</p>
+                                <p>E' → B</p>
+                                <p>F' → C</p>
+                            </div>
+                            <div id="table-container">
+                                <table>
+                                    <tr>
+                                        <td></td>
+                                        <td></td>
+                                        <td colspan="6">(previous frame)</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td></td>
+                                        <td></td>
+                                        <td>A</td>
+                                        <td>B</td>
+                                        <td>C</td>
+                                        <td>D</td>
+                                        <td>E</td>
+                                        <td>F</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td rowspan="6" style="writing-mode: vertical-lr">(current frame)</td>
+                                        <td>A'</td>
+                                        <td>3</td>
+                                        <td>9</td>
+                                        <td>7</td>
+                                        <td>5</td>
+                                        <td>2</td>
+                                        <td>1</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td>B'</td>
+                                        <td>3</td>
+                                        <td>4</td>
+                                        <td>6</td>
+                                        <td>4</td>
+                                        <td>2</td>
+                                        <td>6</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td>C'</td>
+                                        <td>5</td>
+                                        <td>2</td>
+                                        <td>5</td>
+                                        <td>1</td>
+                                        <td>1</td>
+                                        <td>4</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td>D'</td>
+                                        <td>8</td>
+                                        <td>3</td>
+                                        <td>5</td>
+                                        <td>3</td>
+                                        <td>5</td>
+                                        <td>8</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td>E'</td>
+                                        <td>3</td>
+                                        <td>1</td>
+                                        <td>9</td>
+                                        <td>7</td>
+                                        <td>3</td>
+                                        <td>7</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td>F'</td>
+                                        <td>6</td>
+                                        <td>7</td>
+                                        <td>1</td>
+                                        <td>9</td>
+                                        <td>7</td>
+                                        <td>7</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                </table>
+                                <svg id="table-draw"></svg>
+                            </div>
+                            <button id="next-btn" style="display: none;">Next</button>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 12:</b>Hungarian Algorithm</div>
+                        <script src="js/hungarian.js"></script>
+                    </div>
+                </div>
+                <p>
+                    1. Component Introduction:
+                    The purpose of this component is to let user know how the Hungarian
+                    algorithm works by showing the row reduction and column reduction
+                    process of the algorithm, and know how DeepSORT pair the objects
+                    in this way.
+                </p>
+                <p>
+                    2. User's Experience:
+                    They will experience the pairing process of the Hungarian algorithm
+                    with a few click. Doesn't need to see the code or math formula.
+                </p>
+                <p>
+                    3. How to use?:
+                    Click reduce button to do the row reduction and column reduction,
+                    and zeros will be marked on the table. If zeros is enough to
+                    pair all the objects, the pairing will be shown on the right
+                    side of the table.
+                </p>
+                <p>
+                    4. What user will learn?:
+                    They will learn how the Hungarian algorithm works, and know
+                    the pairing process is easy to understand, it's not like a
+                    black box or some magic, it's just some simple steps to reduce
+                    objects be paired.
+                </p>
+
+
+                <h3>Combining YOLO and DeepSORT</h3> (not ai)
+                <p>
+                    Now that we have covered how YOLO and DeepSORT work, let's see how we can combine them to track
+                    objects in videos. YOLO is used to detect objects in each frame of the video and DeepSORT is used to
+                    track those objects over time. The final result is a list of tracks, each corresponding to a unique
+                    object that was detected and tracked throughout the video.
+                </p>
+                <p>
+                    However, it is important to note that the results produced by these algorithms are not always
+                    correct and have their limitations. In some situations, objects may not be detected or tracked
+                    accurately due to various factors such as occlusion, changes in lighting conditions, or objects that
+                    visible size is too small because they are far away.
+                </p>
+                <p>
+                    In the interactive element below, you can see the results of combining YOLO and DeepSORT on a video
+                    captured by a camera at different times of the day and weather conditions. The options in the
+                    selector allow you to choose between different scenarios. Keep in mind that while the algorithm may
+                    perform well in some scenarios, it may not be as accurate in others:
+                </p>
+                <div class="framed" style="margin-bottom: 20px">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            Yolo & DeepSORT combine
+                        </div>
+                        <div class="yolo-deepsort-container" style="margin-left: 9%">
+                            <div class="video-container" style="position: relative; margin-right: 20px">
+                                <video id="yolo-deepsort" width="640" height="360" muted style="position: relative; z-index: 0;">
+                                    <source src="" type="video/mp4">
+                                </video>
+                                <!-- <canvas id="yolo-deepsort-canvas" width="640" height="360" style="position: absolute; top: 0; left: 0; z-index: 1;"></canvas> -->
+                            </div>
+                            <div class="yd-count" style="margin-right: 6%; min-width: fit-content;"">
+                                <p>BIGCAR: <span id="bigcar">0</span></p>
+                                <p>SMALLCAR: <span id="smallcar">0</span></p>
+                                <p>MOTORBIKE: <span id="motorbike">0</span></p>
+                            </div>
+                            <div>
+                                <div class="yd-select" style="margin-bottom: 50%;">
+                                    <select>
+                                        <option selected disabled>Choose Time</option>
+                                        <option value="AM05">AM 05:00</option>
+                                        <option value="AM0930">AM 09:30</option>
+                                        <option value="PM07">PM 07:00</option>
+                                        <option value="rain">Rain</option>
+                                    </select>
+                                </div>
+                                <button id="yd-btn">Show</button>
+                            </div>
+                            
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 13:</b>Yolo & DeepSORT combine</div>
+                        <script src="js/yolo_deepsort.js"></script>
+                    </div>
+                </div>
+                <p>
+                    1. Component Introduction:
+                    The purpose of this component is to let user know the result of
+                    DeepSORT with YOLO. And showing the result will change by the
+                    different time and weather. It's will vary in conditions.
+                </p>
+                <p>
+                    2. User's Experience:
+                    They will see differet result of DeepSORT with YOLO by different
+                    time and weather.
+                </p>
+                <p>
+                    3. How to use?:
+                    They can select different time and weather on the right side to
+                    see the result.
+                </p>
+                <p>
+                    4. What user will learn?:
+                    They will learn the importance of choose the right place to set
+                    up the camera. And make sure the camera can capture enough light
+                    from the road so that the algorithm can detect the object. And
+                    knowing the limitation of the algorithm.
+                </p>
+            </section>
+
+
+            <section id="fttrwa">
+                <h2>IV. From Theory to Real-World Application</h2> (ai)
+                <p>
+                    In this section, we will explore the practical steps involved in applying the YOLO-DeepSORT
+                    algorithm to real-world applications. While the theoretical understanding is important, it is
+                    equally crucial to know how to prepare data, train the model, and classify the tracks in real-world
+                    scenarios.
+                </p>
+                <p>
+                    One of the key factors that determines the performance of a deep learning algorithm is the quality
+                    and relevance of the data it is trained on. Although pre-trained models on public datasets are
+                    suitable in many cases, if the real-world data has unique characteristics that are not found in the
+                    public datasets, the model may not perform well. Therefore, we need to annotate and train the model
+                    using our own dataset.
+                </p>
+
+                <p>
+                    The first step in applying the algorithm to real-world scenarios is annotation, where we label
+                    objects in our dataset and create bounding boxes around them. This annotated dataset is then used to
+                    train the model.
+                </p>
+
+                <p>
+                    However, the quality of the model also depends on several other factors, such as the number of data
+                    samples, the model architecture, and the training parameters. Therefore, we need to tune the model
+                    by conducting experiments to find the optimal settings that yield the best results.
+                </p>
+
+                <p>
+                    Once we have a well-trained model, we can use it to track objects in real-world videos. In
+                    Intelligent Transportation Systems, it is essential to know the type of vehicle being tracked.
+                    Therefore, we need to classify the tracks based on the object's characteristics, such as its shape,
+                    size, and color. This step enables us to obtain additional insights and make more informed decisions
+                    based on the tracked objects' attributes.
+                </p>
+
+                <p>
+                    In the following section, we will provide a detailed guide on how to perform annotation, model
+                    tuning, and track classification to apply the YOLO-DeepSORT algorithm to real-world scenarios
+                    effectively.
+                </p>
+
+                <h3>Annotation: Creating a High-Quality Dataset</h3> (ai)
+                <p>
+                    In order to train a high-quality model, it is essential to have a high-quality dataset. This means
+                    that the process of annotation, or marking up the dataset with labels and bounding boxes, is a
+                    critical step. In this section, you can practice annotating objects using a simple version of a
+                    professional annotation tool. By doing so, you can get a sense of how long it takes to annotate
+                    objects accurately and the level of precision required to produce a high-quality dataset.
+                </p>
+                <p>
+                    The interactive tool below provides all the basic functions you need to annotate objects. You can
+                    use
+                    your mouse to draw bounding boxes around the objects, select the appropriate labels and object
+                    status,
+                    and submit your annotations. Keep in mind that annotation is a time-consuming task that requires
+                    careful attention to detail. The quality of your annotations will ultimately determine the quality
+                    of
+                    the model you are able to train:
+                </p>
+                <div class="framed" style="margin-bottom: 20px; width:1150px;">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            Annotation
+                        </div>
+                        <div class="ac-container">
+                            <div id="tip">
+                                <div class="text-center">
+                                    <span id="ac-tip-start">Click the start button to labeling the car in the
+                                        image.</span>
+                                </div>
+                                <button id="ac-start">Start</button>
+                            </div>
+                            <div class="sub-container">
+                                <div class="canvas-wrapper">
+                                    <canvas id="ac" width="656" height="494"></canvas>
+                                </div>
+                                <table id="ac-labels">
+                                    <tr>
+                                        <td style="width: 50px;">ID</td>
+                                        <td>label</td>
+                                        <td>state</td>
+                                    </tr>
+                                </table>
+                            </div>
+                            <div class="frame-btn">
+                                <button id="prev-frame" disabled="true">Backward</button>
+                                <button id="next-frame" disabled="true">Forward</button>
+                                <button id="ac-finish">Complete</button>
+                                <p><span id="ac-timer"></span></p>
+                                <p><span id="ac-totalSec"></span></p>
+                                <p><span id="ac-perSec"></span></p>
+                            </div>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 14:</b>Annotation</div>
+                        <script src="js/annotation.js"></script>
+                    </div>
+                </div>
+                <p>
+                    1. Component Introduction:
+                    The purpose of this component is to let user try the process of
+                    annotating the object.
+                </p>
+                <p>
+                    2. User's Experience:
+                    They will go through the process of annotating the object. And
+                    knowing it has great different doing by different people.
+                </p>
+                <p>
+                    3. How to use?:
+                    Drawing the bounding box around the object. And select the label
+                    of the object. If the object is outside the image, you can select
+                    the status to be "outside", if the object is occluded, you can
+                    select the status to be "occluded". Click Forward button to go
+                    to the next image. Click Backward button to go to the previous
+                    image. Click Complete button to finish the annotation. User will
+                    see how many time cost per frame.
+                </p>
+                <p>
+                    4. What user will learn?:
+                    They will learn it's important to establish a standard for
+                    annotating the object. And they will know the job is time
+                    consuming, so they need some people to help with this job.
+                </p>
+
+                <h3>Model Tuning</h3> (ai)
+                <p>
+                    Training a deep learning model requires setting various hyperparameters, such as the learning rate,
+                    number of epochs, and batch size. These hyperparameters can greatly impact the performance of the
+                    model. In this section, we will discuss the process of tuning these hyperparameters to find the best
+                    set for our specific application.
+                </p>
+                <p>
+                    One important metric for evaluating the performance of the model during training is the loss
+                    function. The loss function measures how well the model is predicting the output for a given input.
+                    A good loss function should steadily decrease during training and eventually converge to a low
+                    value. However, if the loss is too low, the model may be overfitting to the training data, which
+                    will result in poor performance on new, unseen data.
+                </p>
+                <p>
+                    To find the best set of hyperparameters, we can experiment with different values and observe the
+                    loss graph during training. The following interactive tool allows you to visualize the loss graph of
+                    the model when using different hyperparameters. You can select different hyperparameters from the
+                    drop-down menu and click the "Start" button to see the corresponding loss graph.
+                </p>
+                <div class="framed" style="margin-bottom: 20px">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            Model Tuning
+                        </div>
+                        <div class="training-container">
+                            <div id="chart"></div>
+                            <div id="training-control">
+                                <select>
+                                    <option value="0">noise added</option>
+                                    <option value="1">without noise</option>
+                                    <option value="2">high learning rate</option>
+                                    <option value="3">low learning rate</option>
+                                </select>
+                                <button>Start</button>
+                            </div>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 15:</b>Model Tuning</div>
+                        <script src="js/training.js"></script>
+                    </div>
+                </div>
+                <p>
+                    1. Component Introduction:
+                    The purpose of this component is to let user see how hyperparameters
+                    affect the training process.
+                </p>
+                <p>
+                    2. User's Experience:
+                    They will see how the loss graph changes with the number of
+                    iterations. And they will see how the hyperparameters affect the
+                    training process.
+                </p>
+                <p>
+                    3. How to use?:
+                    Select the setting on the right side. Click Start button to start
+                    seeing the training process. The loss function will be shown on
+                    the left side changing with the number of iterations.
+                </p>
+                <p>
+                    4. What user will learn?:
+                    They will learn some basic knowledge about setting hyperparameters,
+                    and they will know what kind of loss graph they should see.
+                </p>
+                <h3>Track Classification</h3> (ai)
+                <p>
+                    Once we have obtained the tracks of the objects, the next step is to turn them into useful
+                    information for Intelligent Transportation System (ITS). In the case of intersections, ITS needs to
+                    know the number of cars making left turns, right turns, and going straight. Therefore, we need to
+                    classify the tracks into different categories. In this section, we introduce a simple method to
+                    classify the tracks.
+                </p>
+                <p>
+                    The simplest and most effective way to classify the tracks is by drawing the in/out detection area
+                    of each lane on the intersection. The in/out detection area is a polygonal area, and when a track
+                    crosses this area, we can classify it into different categories. However, there is a tricky problem
+                    here. The edges of the area are highly sensitive, and even a slight change in the edge can have a
+                    significant impact on the track count. Therefore, it is essential to pay attention and draw an
+                    accurate in/out detection area.
+                </p>
+                <p>
+                    Below is an interactive tool that allows you to draw the in/out detection area of each lane on the
+                    intersection. You can adjust the polygon by dragging the corners, and you can move the whole polygon
+                    by dragging the center. The red area indicates the area in which the track will be classified as
+                    "out," and the green area indicates the area in which the track will be classified as "in." Changing
+                    the area will adjust the track count in real-time on the right side, allowing you to see the effect
+                    of the area. Give it a try:
+                </p>
+                <div class="framed" style="margin-bottom: 20px; width:1150px;">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            Track classification
+                        </div>
+                        <div class="tc-container">
+                            <canvas id="tc-canvas" width="650"></canvas>
+                            <table class="tc-table">
+                                <thead>
+                                    <tr>
+                                        <th></th>
+                                        <th>car</th>
+                                        <th>big car</th>
+                                        <th>motor bike</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="tc-count">
+                                        <th>down to up</th>
+                                        <td>0</td>
+                                        <td>0</td>
+                                        <td>0</td>
+                                    </tr>
+                                    <tr class="tc-count">
+                                        <th>up to down</th>
+                                        <td>0</td>
+                                        <td>0</td>
+                                        <td>0</td>
+                                    </tr>
+                                    <tr class="tc-count">
+                                        <th>down to right</th>
+                                        <td>0</td>
+                                        <td>0</td>
+                                        <td>0</td>
+                                    </tr>
+                                    <tr class="tc-count">
+                                        <th>down to left</th>
+                                        <td>0</td>
+                                        <td>0</td>
+                                        <td>0</td>
+                                    </tr>
+                                    <tr class="tc-count">
+                                        <th>up to right</th>
+                                        <td>0</td>
+                                        <td>0</td>
+                                        <td>0</td>
+                                    </tr>
+                                    <tr class="tc-count">
+                                        <th>up to left</th>
+                                        <td>0</td>
+                                        <td>0</td>
+                                        <td>0</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 16:</b>Track Classification</div>
+                        <script src="js/track.js"></script>
+                    </div>
+                </div>
+                <p>
+                    1. Component Introduction:
+                    The purpose of this component is to let user classify the track by
+                    drawing in/out zone on the canvas.
+                </p>
+                <p>
+                    2. User's Experience:
+                    They will see the car turning count changing when they draw in/out
+                    zone on the canvas. And knowing a little change will affect the
+                    result.
+                </p>
+                <p>
+                    3. How to use?:
+                    Click on the canvas to draw and adjust in/out zone. Out zone is
+                    red, in zone is green, drag the corner of the polygon to adjust.
+                </p>
+                <p>
+                    4. What user will learn?:
+                    They will learn it is hard to draw a perfect in/out zone, a little
+                    change will affect the result lot.
+                </p>
+            </section>
+            <section id="conclusion">
+                <h2>Conclusion</h2> (ai)
+                <p>
+                    The technologies we have introduced can overcome the limitations of traditional car flow information
+                    collection methods, such as the labor-intensive and time-consuming car count method. Instead, they
+                    enable the real-time capture and analysis of traffic conditions, allowing for efficient traffic
+                    management and improved traffic flow.
+                </p>
+                <p>
+                    We have delved into the basic concepts of Object Tracking, making it easier for you to understand
+                    how such an AI algorithm works with the help of an interactive tool. Our aim is to provide you with
+                    an overall insight into these black-box-like techniques, so that when you try to implement them in
+                    your own project, you will know what to avoid and where to apply them.
+                </p>
+                <p>
+                    Furthermore, we have shared some tricks for better implementing the Object Tracking algorithm in ITS
+                    applications, helping you to avoid common mistakes and save time when implementing it. We have
+                    covered topics such as how to classify tracks, how to improve the accuracy of the algorithm, and
+                    what a good model training process should look like.
+                </p>
+                <p>
+                    In conclusion, after reading this paper, you can confidently implement the Object Tracking algorithm
+                    in real-world applications, use it to gather traffic information, and adjust traffic management
+                    strategies accordingly.
+                </p>
+            </section>
+            <section id="references">
+                <h2>References</h2>
+            </section>
+
+        </div>
+    </article>
+</body>
+
+</html>
