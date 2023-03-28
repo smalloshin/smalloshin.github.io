@@ -1,5 +1,4 @@
 var video = document.getElementById('yolo-deepsort');
-// var canvasElem = document.getElementById('yolo-deepsort-canvas');
 var canvasElem = document.createElement('canvas');
 (async () => {
   var previous_frame = 0;
@@ -8,22 +7,13 @@ var canvasElem = document.createElement('canvas');
     'smallcar': [],
     'bigcar': [],
   };
-  let am0930track_data, am05track_data, pm07track_data, raintrack_data, track_data;
+  let am0930track_data, raintrack_data, track_data;
   let am0930response = await fetch("data/yolo_deepsort/AM0930.csv");
   const am0930csvText = await am0930response.text();
   const am0930rows = am0930csvText.split("\n").map((row) => row.split(","));
   am0930rows.shift();
   am0930track_data = groupByFrame(am0930rows);
-  let am05response = await fetch("data/yolo_deepsort/AM05.csv");
-  const am05csvText = await am05response.text();
-  const am05rows = am05csvText.split("\n").map((row) => row.split(","));
-  am05rows.shift();
-  am05track_data = groupByFrame(am05rows);
-  let pm07response = await fetch("data/yolo_deepsort/PM07.csv");
-  const pm07csvText = await pm07response.text();
-  const pm07rows = pm07csvText.split("\n").map((row) => row.split(","));
-  pm07rows.shift();
-  pm07track_data = groupByFrame(pm07rows);
+  
   let rainresponse = await fetch("data/yolo_deepsort/rain.csv");
   const raincsvText = await rainresponse.text();
   const rainrows = raincsvText.split("\n").map((row) => row.split(","));
@@ -31,7 +21,6 @@ var canvasElem = document.createElement('canvas');
   raintrack_data = groupByFrame(rainrows);
   track_data = am0930track_data;
   var fps_factor = 30;
-  console.log(track_data);
   canvasElem.width = video.width;
   canvasElem.height = video.height;
   var yolo_deepsort_canvas = new fabric.Canvas(canvasElem, {});
@@ -53,18 +42,6 @@ var canvasElem = document.createElement('canvas');
       fps_factor = 30;
       video.src = 'data/yolo_deepsort/AM0930.mp4';
       track_data = am0930track_data;
-      video.load();
-    }
-    else if (selected == 'AM05'){
-      fps_factor = 30.53;
-      video.src = 'data/yolo_deepsort/AM05.mp4';
-      track_data = am05track_data;
-      video.load();
-    }
-    else if (selected == 'PM07'){
-      fps_factor = 30;
-      video.src = 'data/yolo_deepsort/PM07.mp4';
-      track_data = pm07track_data;
       video.load();
     }
     else if (selected == 'rain'){
@@ -92,13 +69,9 @@ var canvasElem = document.createElement('canvas');
     }, {});
   }
 
-  
-
   // set canvas size
-
   // append canvas element to the DOM
   $(".video-container").append(canvasElem);
-
 
   var rect = new fabric.Rect({
       left: 0,
@@ -168,7 +141,7 @@ var canvasElem = document.createElement('canvas');
             var color = 'rgba(0,125,255,0.2)'
             var stroke_color = 'blue'
           }
-          console.log('Drawing rectangle for object:', obj);
+
           var rect = new fabric.Rect({
             left: obj.bbox_left_up_x/2,
             top: obj.bbox_left_up_y/2,
@@ -210,7 +183,6 @@ var canvasElem = document.createElement('canvas');
   });
   $("#yd-btn").click(function(){
     if (video.src){
-      console.log($("#yd-btn").text() === "Show");
       if($("#yd-btn").text() === "Show"){
         video.play();
         $("#yd-btn").text("Pause");
@@ -224,5 +196,3 @@ var canvasElem = document.createElement('canvas');
     
   });
 })();
-
-
