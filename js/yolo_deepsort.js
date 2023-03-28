@@ -87,8 +87,6 @@ var canvasElem = document.createElement('canvas');
       defaultCursor: 'default',
   });
 
-
-  
   video.addEventListener('play', function() {
     var frameNumber = 0;
     var intervalID = window.setInterval(function() {
@@ -101,7 +99,6 @@ var canvasElem = document.createElement('canvas');
         return;
       }
       else{
-        
         var objects = track_data[frameNumber+3] || [];
         if (!track_data[frameNumber+3]){
           return;
@@ -177,7 +174,6 @@ var canvasElem = document.createElement('canvas');
         $("#motorbike").text(existing_objects['motorbike'].length);
         yolo_deepsort_canvas.renderAll();
       }
-      
     }, fps_factor);
     previous_frame = frameNumber;
   });
@@ -192,7 +188,5 @@ var canvasElem = document.createElement('canvas');
         $("#yd-btn").text('Show');
       }
     }
-    
-    
   });
 })();
