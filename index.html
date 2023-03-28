@@ -37,11 +37,7 @@
 
     <!-- Example chessboard immersive app -->
     <script type="text/javascript" src="https://xploreqa.ieee.org/assets/vendor/jquery/jquery-3.5.1.min.js"></script>
-    <script type="text/javascript" src="chessboard/jquery-ui-1.13.2.min.js"></script>
     <script type="text/javascript" src="./js/jquery.csv.min.js"></script>
-    <link rel="stylesheet" href="chessboard/jquery-ui.min.css">
-    <link rel="stylesheet" href="chessboard/chessboard.css">
-    <script type="text/javascript" src="chessboard/chessboard.js"></script>
     <script src="./js/fabric.min.js.js"
         integrity="sha512-P6uimDKoj1nnPSo2sPmgbZy99pPq9nHXhLwddOnLi1DC+fEM83FEUcHPRPifbx1rlRkdMinViaWyDfG45G9BuA=="
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -432,14 +428,16 @@
                                         <p>Click on the canvas to draw a bounding box around the car, and select the car type.</p>
                                     </span>
                                     <p><span id="totalSec"></span></p>
+                                    <p><span id="yolo-result">YOLO time: 0.077s</span></p>
                                     <p><span id="timer"></span></p>
                                     <button id="btn-start">Start</button>
                                     <button id="btn-finish">Finish</button>
+                                    <button id="btn-reset">Reset</button>
                                 </div>
                             </div>
                             <div class="sub-container">
                                 <div id="overlay"></div>
-                                <div class="canvas-wrapper">
+                                <div class="canvas-wrapper-simple">
                                     <canvas id="annotation-canvas" width="656" height="494"></canvas>
                                 </div>
                                 <table id="labels">
@@ -448,12 +446,6 @@
                                         <td>label</td>
                                     </tr>
                                 </table>
-                            </div>
-                            <div class="sub-container" id="yolo-result">
-                                <p style="margin-bottom: 0;">YOLO time: 0.077s</p>
-                                <div class="canvas-wrapper">
-                                    <canvas id="yolo-canvas" width="656" height="494"></canvas>
-                                </div>
                             </div>
                         </div>
                         <!-- Frame caption -->
