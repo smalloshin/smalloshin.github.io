@@ -50,7 +50,7 @@
     accent-color: green;
 }
 
-.compare-items > input[type=checkbox].worng {
+.compare-items > input[type=checkbox].wrong {
     accent-color: red;
 }
 

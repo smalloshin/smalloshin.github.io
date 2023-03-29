@@ -5,7 +5,7 @@
     justify-content: space-around;
 }
 
-.yd-select > select {
+.yd-select > select, #yd-btn {
     padding: 8px 6px;
     font-size: 1rem;
 }

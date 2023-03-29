@@ -166,7 +166,7 @@
                 comapreCheckbox[i].checked = true;
                 $(comapreCheckbox[i]).addClass("correct");
             } else if (comapreCheckbox[i].checked) {
-                $(comapreCheckbox[i]).addClass("worng");
+                $(comapreCheckbox[i]).addClass("wrong");
             }
         }
 
@@ -181,7 +181,7 @@
 
     function loadQuestion() {
         comapreCheckbox.removeClass("correct");
-        comapreCheckbox.removeClass("worng");
+        comapreCheckbox.removeClass("wrong");
         comapreCheckbox.prop("checked", false);
 
         targetImage.attr("src", Questions[questionIndex].target);
