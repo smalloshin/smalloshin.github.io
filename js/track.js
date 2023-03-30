@@ -3,37 +3,24 @@
 
     const directions = [
         { in: "down", out: "up" },
-        { in: "up", out: "down" },
         { in: "down", out: "right" },
         { in: "down", out: "left" },
-        { in: "up", out: "right" },
-        { in: "up", out: "left" },
+        { in: "left", out: "right" },
+        { in: "right", out: "left" },
     ];
 
     var polygons = {
         up: {
             in: {
                 position: {
-                    left: 235.25,
-                    top: 104.84308192235335,
+                    left: -1,
+                    top: -1,
                 },
                 points: [
-                    {
-                        x: 15,
-                        y: 6.9916196340004575,
-                    },
-                    {
-                        x: 49,
-                        y: 0,
-                    },
-                    {
-                        x: 49,
-                        y: 63.923379510860244,
-                    },
-                    {
-                        x: 0,
-                        y: 72.912604754575,
-                    },
+                    { x: 0, y: 0 },
+                    { x: 0, y: 0 },
+                    { x: 0, y: 0 },
+                    { x: 0, y: 0 },
                 ],
             },
             out: {
@@ -113,51 +100,24 @@
         },
         down: {
             in: {
-                position: {
-                    left: 257,
-                    top: 297.09701556353684,
-                },
+                position: { left: 211.16996465594949, top: 269.75191299691915 },
                 points: [
-                    {
-                        x: 2.75,
-                        y: 4.994014024286059,
-                    },
-                    {
-                        x: 127.75,
-                        y: 0,
-                    },
-                    {
-                        x: 133.75,
-                        y: 67.91859073028871,
-                    },
-                    {
-                        x: 0,
-                        y: 66.76650419018262,
-                    },
+                    { x: 5.996307692307639, y: 0 },
+                    { x: 164.8984615384615, y: 2.7940670975148123 },
+                    { x: 136.91569230769227, y: 94.5990288135348 },
+                    { x: 0, y: 94.79860177197702 },
                 ],
             },
             out: {
                 position: {
-                    left: 57,
-                    top: 300.0934239781079,
+                    left: -1,
+                    top: -1,
                 },
                 points: [
-                    {
-                        x: 9.75,
-                        y: 0.9988028048576894,
-                    },
-                    {
-                        x: 201.75,
-                        y: 0,
-                    },
-                    {
-                        x: 200,
-                        y: 65.76770138532578,
-                    },
-                    {
-                        x: 0,
-                        y: 65.76770138532578,
-                    },
+                    { x: 0, y: 0 },
+                    { x: 0, y: 0 },
+                    { x: 0, y: 0 },
+                    { x: 0, y: 0 },
                 ],
             },
         },
@@ -287,7 +247,7 @@
     function getRegion(polygon) {
         return polygon.points.map((p) => ({
             x: p.x + polygon.left,
-            y: p.y + polygon.height,
+            y: p.y + polygon.top,
         }));
     }
 
@@ -296,10 +256,10 @@
     }
 
     function inRegion(region, point) {
-        let a = mulCross(region[0], region[1], point);
-        let b = mulCross(region[1], region[2], point);
-        let c = mulCross(region[2], region[3], point);
-        let d = mulCross(region[3], region[0], point);
+        let a = mulCross(region[3], region[0], point);
+        let b = mulCross(region[0], region[1], point);
+        let c = mulCross(region[1], region[2], point);
+        let d = mulCross(region[2], region[3], point);
 
         if (
             (a >= 0 && b >= 0 && c >= 0 && d >= 0) ||
@@ -407,7 +367,6 @@
         );
 
         calcCar();
-
         canvas.on("object:moving", calcCar);
     });
 })();
