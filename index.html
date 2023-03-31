@@ -332,25 +332,7 @@
                     </div>
                 </div>
 
-
-                <!-- hobd:Human object detection -->
-                <ol>
-                    <li id="hobd_1">When we see an object, our brains first try to separate the object from the
-                        background by identifying its outline.</li>
-                    <li id="hobd_2">Once we have identified the object's outline, we then extract its features and try
-                        to match them with known patterns to determine what the object is.</li>
-                    <li id="hobd_3">
-                        After we have matched the object's features with known patterns, we can classify the object
-                        based on its features.
-                    </li>
-                    <li id="hobd_4">
-                        However, sometimes we may perceive illusions or misidentify objects. To account for this, we
-                        apply multiple checks to determine the likelihood of an object's existence in a particular area,
-                        and we use our prior experiences to filter out low-confidence objects.
-                    </li>
-                </ol>
-                <p>
-                    In this project, we use the YOLO (You Only Look Once) Object Detection algorithm as our detector to
+                <p> In this project, we use the YOLO (You Only Look Once) Object Detection algorithm as our detector to
                     identify the position of cars and classify them. YOLO is a real-time object detection algorithm that
                     is based on a Convolutional Neural Network (CNN), which is a deep learning model that simulates the
                     way humans think about an image. Like the human brain, YOLO first separates the objects from the
@@ -358,12 +340,40 @@
                     known patterns to determine what the object is. By applying multiple checks and prior experiences,
                     YOLO filters out low-confidence objects and accurately identifies the positions of cars in the
                     video. 
+                    
+                    <ol>
+                        <li class="inline-math" id="yolop_1">When given an image, YOLO takes each pixel's RGB color as input
+                            to its Convolutional Neural Network (CNN) model. Each color (e.g. red represented as $(255, 0,
+                            0)$) is converted to a numerical value.</li>
+                        <li id="yolop_2">
+                            The first step of the CNN process is similar to the first step (<a href="#hobd_1">hobd_1</a>)
+                            for a human identifying an object. YOLO applies a series of filters to the image to enhance the
+                            object's outline. This means that YOLO is extracting "outline" features of the object.
+                        </li>
+                        <li id="yolop_3">
+                            YOLO's CNN applies multiple filter layers to the image. Each filter layer extracts more complex
+                            features from the previous layer. Eventually, the final output of the CNN is a feature map that
+                            represents the probability of objects of different classes being present in the image. This can
+                            be thought of as a combination of steps two and three (<a href="#hobd_2">hobd_2</a> and <a
+                                href="#hobd_3">hobd_3</a>) in human object detection. With this, YOLO can both locate and
+                            classify objects.
+                        </li>
+                        <li id="yolop_4">
+                            After identifying the position and class of an object, YOLO generates a Bounding Box (bbox)
+                            around the object. The bbox includes YOLO's confidence score, which indicates the likelihood
+                            that an object is present within the bbox. YOLO can then filter out low confidence objects by
+                            setting a threshold for confidence. This is similar to the fourth step (<a
+                                href="#hobd_4">hobd_4</a>) in human object detection, where humans may ignore certain areas
+                            based on experience and probability.
+                        </li>
+                    </ol>    
+                
+                
                 </p>
-
-                <p>YOLO brief and steps</p>
+                
                 
                 <figure class="text-center">
-                    <img src="img/yolo.jpg" alt="YOLO detection algorithm" width="511" height="441">
+                    <img src="img/yolo.jpg" alt="YOLO detection algorithm" width="700" height="500">
                     <figcaption><strong>Figure 4:</strong> YOLO detection algorithm
                     </figcaption>
                 </figure>
@@ -399,32 +409,7 @@
 
 
                 <!-- yolop:YOLO process -->
-                <ol>
-                    <li class="inline-math" id="yolop_1">When given an image, YOLO takes each pixel's RGB color as input
-                        to its Convolutional Neural Network (CNN) model. Each color (e.g. red represented as $(255, 0,
-                        0)$) is converted to a numerical value.</li>
-                    <li id="yolop_2">
-                        The first step of the CNN process is similar to the first step (<a href="#hobd_1">hobd_1</a>)
-                        for a human identifying an object. YOLO applies a series of filters to the image to enhance the
-                        object's outline. This means that YOLO is extracting "outline" features of the object.
-                    </li>
-                    <li id="yolop_3">
-                        YOLO's CNN applies multiple filter layers to the image. Each filter layer extracts more complex
-                        features from the previous layer. Eventually, the final output of the CNN is a feature map that
-                        represents the probability of objects of different classes being present in the image. This can
-                        be thought of as a combination of steps two and three (<a href="#hobd_2">hobd_2</a> and <a
-                            href="#hobd_3">hobd_3</a>) in human object detection. With this, YOLO can both locate and
-                        classify objects.
-                    </li>
-                    <li id="yolop_4">
-                        After identifying the position and class of an object, YOLO generates a Bounding Box (bbox)
-                        around the object. The bbox includes YOLO's confidence score, which indicates the likelihood
-                        that an object is present within the bbox. YOLO can then filter out low confidence objects by
-                        setting a threshold for confidence. This is similar to the fourth step (<a
-                            href="#hobd_4">hobd_4</a>) in human object detection, where humans may ignore certain areas
-                        based on experience and probability.
-                    </li>
-                </ol>
+                
 
                 <p>
                     Now that we've covered the basics of object detection and how YOLO works, you can try your hand at
