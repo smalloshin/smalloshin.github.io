@@ -71,7 +71,7 @@
     padding: 6px 8px;
     font-size: 1rem;
     outline: none;
-    margin-bottom: 10px;
+    margin: 10px 0;
 }
 
 #prev-frame, #next-frame, #ac-finish {

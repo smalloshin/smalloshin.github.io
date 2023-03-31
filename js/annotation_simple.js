@@ -2,8 +2,6 @@
     $("#btn-finish").hide();
     $("#tip-finish").hide();
     $("#btn-reset").hide();
-    $("#timer").hide();
-    $("#yolo-result").hide();
     $("#labels").hide();
 
     let canvas = new fabric.Canvas("annotation-canvas");
@@ -85,28 +83,15 @@
         $("#tip-start").hide();
         $("#btn-finish").show();
         $("#tip-finish").show();
-        $("#timer").show();
-
-        let now = new Date().getTime();
-        timer = setInterval(() => {
-            let timeElapsed = new Date().getTime() - now;
-            sec = timeElapsed.toString().slice(0,-3);
-            ms = timeElapsed % 1000;
-            $("#timer").text(`${sec}.${ms}s`);
-        }, 1);
     });
 
     $("#btn-finish").click(() => {
         $.each(rects, (i, rect) => {
             canvas.add(rect);
         });
-        clearInterval(timer);
         $("#overlay").show();
-        $("#timer").hide();
         $("#btn-finish").hide();
         $("#tip-finish").hide();
-        $("#totalSec").text(`Time: ${sec}.${ms}s`);
-        $("#yolo-result").show();
         $("#btn-reset").show();
     });
 
@@ -114,8 +99,6 @@
         $("#btn-start").show();
         $("#tip-start").show();
         $("#btn-reset").hide();
-        $("#yolo-result").hide();
-        $("#totalSec").text(" ");
         $.each(rects, (i, rect) => {
             canvas.remove(rect);
         });
