@@ -7,8 +7,7 @@
     <meta name="description"
         content="An interactive article on using YOLO object detection and DeepSORT tracking algorithm to extract traffic volume from CCTV video recorded in a Transportation System. Learn how YOLO and DeepSORT work, and how to apply them in to a real-world scenario.">
     <meta charset="utf8">
-    <title>Unlocking Valuable Traffic Insights: Efficient and Automated Intersection Turning Volume Analytics 
-        through Computer Vision Techniques
+    <title>Measuring Intersection Turning Volume through Computer Vision Techniques
     </title>
     <meta name="referrer" content="strict-origin-when-cross-origin" />
 
@@ -262,7 +261,7 @@
                     </p>   
 
                 <figure class="text-center">
-                    <img src="img/ObjectTrackingWorkflow.svg" alt="Object Tracking Workflow" width="511" height="441">
+                    <img src="img/ObjectTrackingWorkflow.svg" alt="System overview" width="511" height="441">
                     <figcaption><strong>Figure 2:</strong> System overview
                     </figcaption>
                 </figure>
@@ -286,11 +285,11 @@
                     <i>width</i>,<i>height</i>) where <i>class</i> represent
                     the type of vehicle, <i>x_center</i> and <i>y_center</i> represent the x-coordinate and y-coordinate
                     of the center of the box, and <i>width</i> and <i>height</i> are the width and height of the box.
-                    It is worth mentioned that data labeling should comply a specific regulation to ensure the model 
-                    could  
-
-
-
+                    It is worth mentioned that data labeling should comply a specific regulation to ensure the consistency
+                    of training data. Fig 3. allows readers to label vehicles on a frame by yellow rectangles. 
+                    Once the annotation is done, red rectangles, which are annotated by the authors, will be shown. The 
+                    variation in labels across different individuals highlights the need to establish labeling regulations 
+                    prior to labeling data.
                 </p>
 
                 <!-- Interactive frame -->
@@ -360,6 +359,44 @@
                     YOLO filters out low-confidence objects and accurately identifies the positions of cars in the
                     video. 
                 </p>
+
+                <p>YOLO brief and steps</p>
+                
+                <figure class="text-center">
+                    <img src="img/yolo.jpg" alt="YOLO detection algorithm" width="511" height="441">
+                    <figcaption><strong>Figure 4:</strong> YOLO detection algorithm
+                    </figcaption>
+                </figure>
+
+                <div class="framed" style="margin-bottom: 20px">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            YOLO Extract feature from image (apply filter)
+                        </div>
+                        <div class="yolo-extract-container">
+                            <div class="yolo-extract-image">
+                                <div class="img background-img"></div>
+                                <div class="img foreground-img"></div>
+                                <input type="range" min="1" max="100" value="50" id="slider" class="slider"
+                                    name="slider">
+                                <div class='slider-button'></div>
+                            </div>
+                            <div class="yolo-extract-filter">
+                                <select name="filter" id="filter"></select>
+                                <div class="filter-box">
+                                    <img class="filter" src="img/filter/filter1.jpg"></img>
+                                    <p class="filter-text">filter matrix</p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 6:</b> YOLO Extract feature from image (apply filter)</div>
+                        <script src="js/yolo_extract.js"></script>
+                    </div>
+                </div>
+
 
                 <!-- yolop:YOLO process -->
                 <ol>
