@@ -275,16 +275,22 @@
                 <p>
                     Object detection is the first step of measuring intersection turning volume, which 
                     identifies the location of vehicles in each frame of a video and classifies them into a type of 
-                    vehicles, e.g., small car, big car, and motorcycle. YOLO family is the most widely-used 
-                    algorithms form object detection. Therefore, this paper takes YOLO as the core
-
-
-
+                    vehicles, e.g., small car, big car, and motorcycle. This paper takes YOLOv1, one of the 
+                    most classical object detection algorithm,  as an example as YOLO family are 
+                    open-sourced and production-ready object detection algorithms []. 
                     
-                    The task can be
-                    divided into two sub-tasks: object localization and object classification. While human beings can
-                    easily identify objects in an image, we can refer to the process of how humans identify objects to
-                    better understand object detection:
+                    As object detection is a supervised task, it is necessary to execute data labeling to 
+                    improve the accuracy of the pretrained model of YOLO. First of all, several frames From
+                    videos are selected. Each vehicle in a frame is mark by a rectangle box. This box can be 
+                    represented into the format of (<i>class</i>, <i>x_center</i>>, <i>y_center</i>>, 
+                    <i>width</i>,<i>height</i>) where <i>class</i> represent
+                    the type of vehicle, <i>x_center</i> and <i>y_center</i> represent the x-coordinate and y-coordinate
+                    of the center of the box, and <i>width</i> and <i>height</i> are the width and height of the box.
+                    It is worth mentioned that data labeling should comply a specific regulation to ensure the model 
+                    could  
+
+
+
                 </p>
 
                 <!-- Interactive frame -->
