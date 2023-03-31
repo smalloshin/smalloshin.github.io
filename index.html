@@ -7,7 +7,8 @@
     <meta name="description"
         content="An interactive article on using YOLO object detection and DeepSORT tracking algorithm to extract traffic volume from CCTV video recorded in a Transportation System. Learn how YOLO and DeepSORT work, and how to apply them in to a real-world scenario.">
     <meta charset="utf8">
-    <title>Applying Object Tracking to Intelligent Transportation System
+    <title>Unlocking Valuable Traffic Insights: Efficient and Automated Intersection Turning Volume Analytics 
+        through Computer Vision Techniques
     </title>
     <meta name="referrer" content="strict-origin-when-cross-origin" />
 
@@ -52,15 +53,14 @@
             <div class="container">
                 <!-- Page title -->
                 <h1>
-                    Unlocking Valuable Traffic Insights: Efficient and Automated Volume Analytics through Computer 
-                    Vision Techniques
+                    Measuring Intersection Turning Volume through Computer Vision Techniques
                 </h1>
                 <!-- Subheading -->
                 <p class="subhead">
-                    An interactive article on illustrating an automated pipeline for traffic volume
-                    computation through a series of computer vision techniques. Learn the concept and technique 
+                    An interactive article on illustrating an automated pipeline for measuring intersection
+                    turning volume through a series of computer vision techniques. Learn the concept and technique 
                     details of YOLO and DeepSORT for object detection and object tracking algorithm, along with 
-                    a hot-region-based approach for accurate traffic volumne counting.
+                    a hot-region-based approach for accurate intersection turning volumne counting.
                 </p>
                 <!-- Header info general wrapper -->
                 <div class="header-info">
@@ -131,78 +131,131 @@
                 <!-- Section title -->
                 <h2>I. Introduction</h2> (ai)
                 <p>
-                    The transportation system plays a critical role in modern society. but it
-                    is plagued by traditional problems such as non-adaptive traffic light
-                    control and traffic jams. Fortunately, advances in technology have enabled
-                    the development of high-end techniques that can help solve these problems.
-                    One such technique is the use of Object Tracking and Computational
-                    Technologies, which can make traffic light control more adaptable to road
-                    conditions. These technologies are collectively known as Intelligent
-                    Transportation Systems (ITS).
-                </p>
-                <p>
-                    As you drive your car and pass through a green traffic light at an
-                    intersection, you expect to reach your destination on time. However, the
-                    traffic lights turn red one by one, forcing you to stop at each intersection.
-                    Despite the lack of cars passing on the other side, you waste time waiting
-                    for the traffic light to turn green again. This is a common occurrence in
-                    our daily lives, highlighting the limitations of traffic light control in
-                    adapting to traffic conditions. To make traffic lights more adaptive, we
-                    need real-time traffic condition information for each intersection,
-                    including car flow information.
-                </p>
-                <p>
-                    Obtaining car flow information traditionally involves hiring people to
-                    stand by the roadside and count cars. This is a time-consuming and
-                    labor-intensive task that cannot be scaled up as the number of intersections
-                    increases. With the development of technology, we can now use Object
-                    Tracking to detect cars in an intersection and turn car tracks into useful
-                    car flow information for ITS.
-                </p>
-                <p>
-                    This work demonstrates how the 
-                    This work focuses on the application of Object Tracking to ITS.
-                    We will discuss the requirements for applying this technology to ITS and
-                    how it can be used to make traffic light control more adaptive below:
-                </p>
+                    As the urbanization of the human population continues, the importance of 
+                    intelligent transportation systems has grown significantly. The use of sophisticated 
+                    computational methods, such as deep learning and computer vision, can enhance 
+                    the development of efficient solutions to tackle challenges in the transportation 
+                    industry. In this paper, we demonstrates the construction of an efficient pipeline for 
+                    measuring the intersection turning volume, one of the well-known task in
+                    the transportation field. 
+                    Intersection turning volume refers to the number of vehicles that are turning 
+                    left or right at an intersection during a specific period of time. Such volume is useful
+                    for transportation planners to not only understand overall performance of an 
+                    intersection but also determine the design of turn lanes or signal timing plans for improving safety 
+                    and reducing congestion. A conventional approach to measure the turning traffic volumes relys on manual
+                    efforts to count the number of vehicles in situ or from videos. This approach may
+                    have some concerns in terms of being labor-intensive, prone to sampling bias
+                    , and unsuitable for those applications that need dynamic data collection
+                    like adapative light control. Fig 1. allows readers to experience counting 
+                    the number of vehicles for each type of turns by counting manually. Readers may find
+                    this task is time-consuming and hard to scale up for intelligent transportation systems.
 
-                <ul>
-                    <li><strong>CCTV:</strong>
-                        this is an important component of the system as it provides the necessary
-                        visual data from the road. A CCTV camera can be installed to capture video footage
-                        of the intersection which can be processed by the Object Tracking algorithm.
-                    </li>
-                    <li><strong>Object Detection Algorithm:</strong>
-                        this technique enables the system to detect and identify objects in the video footage.
-                        In this work, YOLO, a state-of-the-art artificial intelligence model, is used as the Object
-                        Detection Algorithm. YOLO can detect multiple objects in real-time videos with high accuracy.
-                    </li>
-                    <li><strong>Tracking Algorithm:</strong>
-                        this algorithm tracks the objects detected by the Object Detection Algorithm across multiple
-                        frames in the video footage. DeepSORT is used as the tracking algorithm in this work. DeepSORT
-                        combines deep learning with the Simple Online and Realtime Tracking (SORT) method to track
-                        objects
-                        in the video footage.
-                    </li>
-                    <li><strong>Annotations:</strong>
-                        in order to train the Tracking Algorithm, annotations are required to label the video footage.
-                        Annotations help to identify the objects in the video footage accurately. Since the details
-                        captured in the video footage can vary from camera to camera, annotations can improve the
-                        performance of the Tracking Algorithm.
-                    </li>
-                    <li><strong>Algorithm Model Training:</strong>
-                        after the annotations are done, the training data is fed into the algorithm models.
-                        In this work, two models are trained - YOLO Object Detection and the "Deep" part of the
-                        DeepSORT Tracking Algorithm. The training data for YOLO is images with bounding box coordinates
-                        and object types, while the training data for DeepSORT is a series of images cropped by
-                        bounding box coordinates grouped by objects.
-                    </li>
-                    <li><strong>Vehicle Tracks Classification:</strong>
-                        once the Vehicle Tracks are obtained from the DeepSORT Tracking Algorithm, the next step is
-                        to extract useful information from the raw track data. Vehicle Tracks Classification enables
-                        the system to identify the direction in which the vehicles are moving, which can provide
-                        valuable insights for traffic management.
-                    </li>
+                    <div class="framed" style="margin-bottom: 20px">
+                        <!-- Additional class for responsiveness -->
+                        <div class="inside">
+                            <!-- Frame top blue text -->
+                            <div class="eyebrow">
+                                Introduction
+                            </div>
+                            <div class="text-center">
+                                <p><span id="description">To count the cars, click on the "Start" button and enter your answers in the table on the right-hand side.</span></p>
+                                <p><span id="intro-timer">0</span></p>
+                                <p></p>
+                            </div>
+                            <div class="introduction-container" style="position:relative">
+                                <div class="introduction-video">
+                                    <!-- Right-up corner text -->
+                                    <div style="justify-content: space-between; display: flex;">
+                                        <div>Up</div>
+                                        <div>Right</div>
+                                    </div>
+                                    <video class="video-frame" width="437" height="329" style="pointer-events:none;" muted>
+                                        <source src="data/introduction/Ko-PER_Intersection_Sequence1d_KAB_SK_1_undist.mp4" type="video/mp4">
+                                        Your browser does not support the video tag.
+                                    </video>
+                                    <div style="justify-content: space-between; display: flex;">
+                                        <div>Left</div>
+                                        <div>Down</div>
+                                    </div>
+                                </div>
+                                <!-- Empty placeholder -->
+                                <div></div>
+                                <div></div>
+                                <div></div>
+                                <div></div>
+                                <div class="count-table-frame" style="display:flex; flex-direction: column;">
+                                    <table class="count-table" style="pointer-events:none; flex: 4; font-size: 0.8em; width:max(6vw, 300); height:(6vw, 300)">
+                                        <thead>
+                                            <tr>
+                                                <th></th>
+                                                <th>car</th>
+                                                <th>big car</th>
+                                                <th>motor bike</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody style="align-items: center;">
+                                            <tr class="count-ans">
+                                                <th>down to up</th>
+                                                <td><input type="number" value="0" data-ans="28"></td>
+                                                <td><input type="number" value="0" data-ans="0"></td>
+                                                <td><input type="number" value="0" data-ans="0"></td>
+                                            </tr>
+                                            <tr class="count-ans">
+                                                <th>up to down</th>
+                                                <td><input type="number" value="0" data-ans="27"></td>
+                                                <td><input type="number" value="0" data-ans="3"></td>
+                                                <td><input type="number" value="0" data-ans="0"></td>
+                                            </tr>
+                                            <tr class="count-ans">
+                                                <th>down to right</th>
+                                                <td><input type="number" value="0" data-ans="3"></td>
+                                                <td><input type="number" value="0" data-ans="1"></td>
+                                                <td><input type="number" value="0" data-ans="1"></td>
+                                            </tr>
+                                            <tr class="count-ans">
+                                                <th>down to left</th>
+                                                <td><input type="number" value="0" data-ans="1"></td>
+                                                <td><input type="number" value="0" data-ans="0"></td>
+                                                <td><input type="number" value="0" data-ans="0"></td>
+                                            </tr>
+                                            <tr class="count-ans">
+                                                <th>up to right</th>
+                                                <td><input type="number" value="0" data-ans="1"></td>
+                                                <td><input type="number" value="0" data-ans="0"></td>
+                                                <td><input type="number" value="0" data-ans="0"></td>
+                                            </tr>
+                                            <tr class="count-ans">
+                                                <th>up to left</th>
+                                                <td><input type="number" value="0" data-ans="3"></td>
+                                                <td><input type="number" value="0" data-ans="0"></td>
+                                                <td><input type="number" value="0" data-ans="0"></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <div class="count-btn-container" style="flex: 1;">
+                                        <button class="count-btn" style="width:5em; font-weight: bold;">Start</button>
+                                    </div>
+                                </div>
+                                
+                            </div>
+                            <!-- Frame caption -->
+                            <div class="caption"><b>Figure 2:</b>Introduction</div>
+                            <script src="js/introduction.js"></script>
+                        </div>
+                    </div>
+
+
+                    This paper discusses an efficient and automated approach for measuring turning 
+                    volumes at intersections based on computer vision technique. Fig. 1 gives
+                    the system overview of this approach. The main components are: 1) traffic monitoring cameras: 
+                    obtaining videos of the intersection with clear view; 2) object 
+                    detection algorithm: detecting the location of an object and identify which type of 
+                    vehicle the detected object is; and identify objects in the video footage; 3) object tracking
+                    algorithm: associating the objects detected by the object detection algoithm across multiple
+                    frames to generate a movement trajectory of each vehicle; 4) intersection turning volume
+                    computation: identify the lanes where the starting point and the end point of 
+                    a trajectory are located to compute the intersection turning volume.
+                    
                 </ul>
                 <figure class="text-center">
                     <img src="img/ObjectTrackingWorkflow.svg" alt="Object Tracking Workflow" width="511" height="441">
@@ -210,134 +263,6 @@
                         Transportation System
                     </figcaption>
                 </figure>
-                <p>
-                    You may attempt to solve this task using traditional methods, and may believe
-                    that it won't take too much time for a human to complete:
-                </p>
-                <div class="framed" style="margin-bottom: 20px">
-                    <!-- Additional class for responsiveness -->
-                    <div class="inside">
-                        <!-- Frame top blue text -->
-                        <div class="eyebrow">
-                            Introduction
-                        </div>
-                        <div class="text-center">
-                            <p><span id="description">To count the cars, click on the "Start" button and enter your answers in the table on the right-hand side.</span></p>
-                            <p><span id="intro-timer">0</span></p>
-                            <p></p>
-                        </div>
-                        <div class="introduction-container" style="position:relative">
-                            <div class="introduction-video">
-                                <!-- Right-up corner text -->
-                                <div style="justify-content: space-between; display: flex;">
-                                    <div>Up</div>
-                                    <div>Right</div>
-                                </div>
-                                <video class="video-frame" width="437" height="329" style="pointer-events:none;" muted>
-                                    <source src="data/introduction/Ko-PER_Intersection_Sequence1d_KAB_SK_1_undist.mp4" type="video/mp4">
-                                    Your browser does not support the video tag.
-                                </video>
-                                <div style="justify-content: space-between; display: flex;">
-                                    <div>Left</div>
-                                    <div>Down</div>
-                                </div>
-                            </div>
-                            <!-- Empty placeholder -->
-                            <div></div>
-                            <div></div>
-                            <div></div>
-                            <div></div>
-                            <div class="count-table-frame" style="display:flex; flex-direction: column;">
-                                <table class="count-table" style="pointer-events:none; flex: 4; font-size: 0.8em; width:max(6vw, 300); height:(6vw, 300)">
-                                    <thead>
-                                        <tr>
-                                            <th></th>
-                                            <th>car</th>
-                                            <th>big car</th>
-                                            <th>motor bike</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody style="align-items: center;">
-                                        <tr class="count-ans">
-                                            <th>down to up</th>
-                                            <td><input type="number" value="0" data-ans="28"></td>
-                                            <td><input type="number" value="0" data-ans="0"></td>
-                                            <td><input type="number" value="0" data-ans="0"></td>
-                                        </tr>
-                                        <tr class="count-ans">
-                                            <th>up to down</th>
-                                            <td><input type="number" value="0" data-ans="27"></td>
-                                            <td><input type="number" value="0" data-ans="3"></td>
-                                            <td><input type="number" value="0" data-ans="0"></td>
-                                        </tr>
-                                        <tr class="count-ans">
-                                            <th>down to right</th>
-                                            <td><input type="number" value="0" data-ans="3"></td>
-                                            <td><input type="number" value="0" data-ans="1"></td>
-                                            <td><input type="number" value="0" data-ans="1"></td>
-                                        </tr>
-                                        <tr class="count-ans">
-                                            <th>down to left</th>
-                                            <td><input type="number" value="0" data-ans="1"></td>
-                                            <td><input type="number" value="0" data-ans="0"></td>
-                                            <td><input type="number" value="0" data-ans="0"></td>
-                                        </tr>
-                                        <tr class="count-ans">
-                                            <th>up to right</th>
-                                            <td><input type="number" value="0" data-ans="1"></td>
-                                            <td><input type="number" value="0" data-ans="0"></td>
-                                            <td><input type="number" value="0" data-ans="0"></td>
-                                        </tr>
-                                        <tr class="count-ans">
-                                            <th>up to left</th>
-                                            <td><input type="number" value="0" data-ans="3"></td>
-                                            <td><input type="number" value="0" data-ans="0"></td>
-                                            <td><input type="number" value="0" data-ans="0"></td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                                <div class="count-btn-container" style="flex: 1;">
-                                    <button class="count-btn" style="width:5em; font-weight: bold;">Start</button>
-                                </div>
-                            </div>
-                            
-                        </div>
-                        <!-- Frame caption -->
-                        <div class="caption"><b>Figure 2:</b>Introduction</div>
-                        <script src="js/introduction.js"></script>
-                    </div>
-                </div>
-                <p>
-                    1. Component Introduction:
-                    A component can let user count the number of cars in each
-                    direction.
-                </p>
-
-                <p>
-                    2. User's Experience:
-                    User will get known to the car direction counting job in
-                    Intelligence Transportation System.
-                </p>
-
-                <p>
-                    3. How to use?:
-                    Press the start button in the left side video segment, then
-                    the video will start to play. User need to count the number
-                    of cars in each direction and input the number in the table
-                    in the right side. After user finish counting, press the
-                    done button to check the answer. Right answer will be in
-                    green color, wrong answer will be in red color.
-                </p>
-
-                <p>
-                    4. What user will learn?:
-                    User will realize although the task is simple, it is not
-                    easy to do it after doing it for a while. And they will know
-                    that if they want this job be apply to the transportation
-                    system, they will need to do this every intersections, and
-                    they will need to do this every day. So they will know how
-                    it's important to use computer to do this job.
-                </p>
             </section>
 
 
