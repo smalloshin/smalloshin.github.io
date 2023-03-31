@@ -325,45 +325,18 @@
                     </div>
                 </div>
 
-                <p> In this project, we use the YOLO (You Only Look Once) Object Detection algorithm as our detector to
-                    identify the position of cars and classify them. YOLO is a real-time object detection algorithm that
-                    is based on a Convolutional Neural Network (CNN), which is a deep learning model that simulates the
-                    way humans think about an image. Like the human brain, YOLO first separates the objects from the
-                    background by identifying their outlines, and then it extracts their features to match them with
-                    known patterns to determine what the object is. By applying multiple checks and prior experiences,
-                    YOLO filters out low-confidence objects and accurately identifies the positions of cars in the
-                    video. 
-
-                    <ol>
-                        <li class="inline-math" id="yolop_1">When given an image, YOLO takes each pixel's RGB color as input
-                            to its Convolutional Neural Network (CNN) model. Each color (e.g. red represented as $(255, 0,
-                            0)$) is converted to a numerical value.</li>
-                        <li id="yolop_2">
-                            The first step of the CNN process is similar to the first step (<a href="#hobd_1">hobd_1</a>)
-                            for a human identifying an object. YOLO applies a series of filters to the image to enhance the
-                            object's outline. This means that YOLO is extracting "outline" features of the object.
-                        </li>
-                        <li id="yolop_3">
-                            YOLO's CNN applies multiple filter layers to the image. Each filter layer extracts more complex
-                            features from the previous layer. Eventually, the final output of the CNN is a feature map that
-                            represents the probability of objects of different classes being present in the image. This can
-                            be thought of as a combination of steps two and three (<a href="#hobd_2">hobd_2</a> and <a
-                                href="#hobd_3">hobd_3</a>) in human object detection. With this, YOLO can both locate and
-                            classify objects.
-                        </li>
-                        <li id="yolop_4">
-                            After identifying the position and class of an object, YOLO generates a Bounding Box (bbox)
-                            around the object. The bbox includes YOLO's confidence score, which indicates the likelihood
-                            that an object is present within the bbox. YOLO can then filter out low confidence objects by
-                            setting a threshold for confidence. This is similar to the fourth step (<a
-                                href="#hobd_4">hobd_4</a>) in human object detection, where humans may ignore certain areas
-                            based on experience and probability.
-                        </li>
-                    </ol>    
-                
-                
+                <p> 
+                With well-trained model, YOLO v1 uses a single convolutional neural network (CNN) to simultaneously 
+                predict bounding boxes and class probabilities for detected objects as shown in Fig. 4. YOLO v1 divides 
+                the input image into a grid of cells and uses trained CNN to predicts a fixed number of bounding boxes 
+                and class probabilities for each cell. The predicted bounding boxes are parameterized relative to the cell 
+                location, width, and height, and the predicted class probabilities are computed for each bounding box. 
+                Finally, YOLO v1 performs post-processing. Non-maximum suppression is applied to remove overlapping 
+                bounding boxes with lower confidence scores. The remaining bounding boxes are selected by a specific 
+                threshold based on their confidence scores and class probabilities. The output is the final set of 
+                detected objects with their bounding boxes and class labels. 
                 </p>
-                
+                YOLO 
                 
                 <figure class="text-center">
                     <img src="img/yolo.jpg" alt="YOLO detection algorithm" width="700" height="500">
