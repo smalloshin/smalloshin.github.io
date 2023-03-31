@@ -336,7 +336,6 @@
                 threshold based on their confidence scores and class probabilities. The output is the final set of 
                 detected objects with their bounding boxes and class labels. 
                 </p>
-                YOLO 
                 
                 <figure class="text-center">
                     <img src="img/yolo.jpg" alt="YOLO detection algorithm" width="700" height="500">
@@ -345,11 +344,12 @@
                 </figure>
                 
                 <p>
-                Convolutional neural network 
-
-                To understand how the kernel extracts features from an image, Fig. 5 gives the  
-
-
+                Take a deep dive into the technical detail. In YOLO v1, convolutional neural network could learn the filters,
+                which can extract meaningful features (represented as heatmaps) from an image, by finishing the downstream task, i.e., prediction the 
+                location of the bounding box and the category of an object in this case. These learnt filters can be then used
+                to extract mearningful features for unseen images. Fig. 5 visualizes a frame before and after a learnt filter is 
+                applied where filters are selected from the CNN in YOLO v1 trained by our real dataset. It can be seen that various features of this frame
+                could be emphasized, which could be useful for object localization and identification.
                 </p>
 
                 <div class="framed" style="margin-bottom: 20px">
@@ -382,401 +382,20 @@
                 </div>
 
                 <p>
-                    
-                </p>
+                    Given an image, YOLO v1 first divides an image into \(S \times S\) cells,
+                    and each cell predict \(B\) bounding box. The confidence score of each detected object 
+                    is the predicted bounding box. The confidence value of the \(i\)-th bounding box is defined as 
+                    \(Pr(Obj_{i}) \times IOU_{pred}^{truth}\) where \(Pr(Obj_{i})\) is the probability that
+                    the object in the \(i\)-th bounding box and \(IOU_{pred}^{truth}\) is the intersection-over-union 
+                    between the predicted bounding box and the ground truth box. The confidence value 
+                    reflects how confident the model is that the box contains an object and also how accurate it thinks 
+                    the box is that it predicts. At last, the confidence scores are then thresholded to remove the boxes 
+                    with low confidence, and non-maximum suppression is applied to remove overlapping boxes and retain only the most 
+                    likely detection for each object. Fig. 6 demonstrates the impact with setting different threshold for 
+                    the confidence value. Readers could observe that a low threshold may generate many overlapping bounding boxes
+                    for the same vehicle. In constrast, a high threshold may miss opportunities to detect some vehicles. A proper 
+                    threshold could be usually obtained via several trials carefully.
 
-                
-
-                <h3>Convolutional Neural Network</h3> (ai)
-                <p>Convolutional Neural Network (CNN) is the core of every object detection algorithm. It is a type of
-                    deep learning model that can be trained to extract an object's features from an image. However, CNN
-                    does not actually see an image. Instead, it only sees a series of numbers. These numbers represent
-                    the RGB values of every pixel in the image (as shown in YOLO process step <a
-                        href="#yolop_1">one</a>). By transforming the image into a series of numbers, the task of image
-                    detection can be solved mathematically, and computers can perform the task for us.</p>
-                <p>To understand how CNN works, we can compare it to the neural structure in the human brain. Each layer
-                    of CNN is composed of neurons that work in parallel, with neurons connected between layers. The
-                    connections between neurons apply functions such as multiplication and addition. After the
-                    computations, the output results are generated, such as bounding box position and object class.
-                    Below, you can try changing the input pixel colors to see how the output of CNN changes. This
-                    particular CNN is trained to identify the patterns of "T" or "L".</p>
-
-                <!-- Interactive frame -->
-                <div class="framed" style="margin-bottom: 20px">
-                    <!-- Additional class for responsiveness -->
-                    <div class="inside">
-                        <!-- Frame top blue text -->
-                        <div class="eyebrow">
-                            YOLO Convolutional Neural Network
-                        </div>
-                        <div class="text-center">
-                            <span><p>Select Color in the Color platette left hand side</p></span>
-                            <span><p>And see different on the right hand side, the CNN will identify the pattern you draw.</p></span>
-                        </div>
-                        <div id="yolo-cnn-container">
-                            
-                            <div id="image-container">
-                                <div id="color-palette">
-                                    <div>Color-platette</div>
-                                    <div id="color-palette-conainer"></div>
-                                </div>
-                                <table id="image-table"></table>
-                            </div>
-                            <div id="neural-network-container"></div>
-                        </div>
-                        <!-- Frame caption -->
-                        <div class="caption"><b>Figure 4:</b> YOLO Convolutional Neural Network </div>
-                        <script src="https://d3js.org/d3.v7.min.js"></script>
-                        <script src="js/yolo_cnn.js"></script>
-                    </div>
-                </div>
-                <p>
-                    1. Component Introduction:
-                    A component can let user know how CNN work. User can change
-                    the input pixel color to see how the output of CNN change.
-                </p>
-
-                <p>
-                    2. User's Experience:
-                    User will know how the pixel color will affect the output of
-                    CNN. They will simply know what CNN is.
-                </p>
-
-                <p>
-                    3. How to use?:
-                    Select the color on the color palette, and click the pixel
-                    you want to change the color. Then, the output of CNN will
-                    change to L or T in real time.
-                </p>
-
-                <p>
-                    4. What user will learn?:
-                    User will know although CNN in most of the time is accurate,
-                    but it is not perfect. In the process they will learn sometimes
-                    CNN will make mistake if the input with noise.
-                </p>
-
-                <h3>Feature Extraction</h3> (ai)
-                <p>
-                    CNNs perform a series of complex calculations on the input image to extract meaningful features. One
-                    of the primary operations performed by CNNs is matrix convolution, which involves sliding a filter
-                    matrix over the input matrix and computing the element-wise product of the filter and input
-                    matrices, followed by summing up the results. For example, given an input matrix:
-                </p>
-                <p class="inline-math">
-                    $$
-                    \begin{bmatrix}
-                    1 & 2 & 3 \\
-                    4 & 5 & 6 \\
-                    7 & 8 & 9 \\
-                    \end{bmatrix}
-                    $$
-                </p>
-                <p>
-                    and a filter matrix:
-                </p>
-                <p class="inline-math">
-                    $$
-                    \begin{bmatrix}
-                    1 & 2 \\
-                    3 & 4 \\
-                    \end{bmatrix}
-                    $$
-                </p>
-                <p>
-                    we can perform matrix convolution to obtain the output matrix:
-                </p>
-                <p class="inline-math">
-                    $$
-                    \begin{bmatrix}
-                    37 & 47 \\
-                    67 & 77 \\
-                    \end{bmatrix}
-                    $$
-                </p>
-                <p>
-                    In this example, the output element in the first row and first column (i.e., 37) is obtained by
-                    computing the element-wise product of the input matrix and the filter matrix, as shown below:
-                </p>
-                <p class="inline-math">
-                    $$
-                    \begin{bmatrix}
-                    1 & 2\\
-                    4 & 5\\
-                    \end{bmatrix}
-                    \ast
-                    \begin{bmatrix}
-                    1 & 2\\
-                    3 & 4\\
-                    \end{bmatrix}
-                    =
-                    \begin{bmatrix}
-                    (1\times1)+(2\times3) & (1\times2)+(2\times4)\\
-                    (4\times1)+(5\times3) & (4\times2)+(5\times4)\\
-                    \end{bmatrix}
-                    =
-                    \begin{bmatrix}
-                    37 & 47 \\
-                    67 & 77 \\
-                    \end{bmatrix}
-                    $$
-                </p>
-                <p>
-                    Performing matrix convolution multiple times with different filters helps the CNN extract different
-                    features from the input image. These features are then passed to the subsequent layers of the
-                    network for further processing and analysis.
-                </p>
-
-                <p>
-                    Convolution plays a crucial role in object detection with CNN. When CNN needs to extract feature
-                    information of objects from an image, it can scan the image with a filter matrix to enhance the area
-                    containing the object while obscuring other areas. For instance, to extract the upper and lower
-                    bounds of a square from an image, a filter matrix can be used to scan the image. The example below
-                    demonstrates this process:
-                    $$
-                    \begin{bmatrix}
-                    27 & 15 & 9 & 4 & 5 & 7 & 3 & 8 & 24 & 19 \\
-                    5 & 27 & 19 & 11 & 8 & 29 & 25 & 11 & 29 & 2 \\
-                    24 & 9 & 9 & 27 & 2 & 26 & 19 & 4 & 20 & 9 \\
-                    15 & 25 & 23 & 246 & 245 & 246 & 252 & 15 & 29 & 8 \\
-                    15 & 29 & 9 & 253 & 246 & 246 & 252 & 24 & 27 & 26 \\
-                    2 & 29 & 15 & 247 & 250 & 253 & 249 & 11 & 10 & 21 \\
-                    18 & 13 & 29 & 253 & 249 & 252 & 251 & 9 & 8 & 11 \\
-                    8 & 11 & 3 & 12 & 16 & 10 & 2 & 23 & 17 & 3 \\
-                    3 & 9 & 16 & 23 & 2 & 11 & 13 & 20 & 24 & 28 \\
-                    28 & 24 & 1 & 10 & 22 & 4 & 17 & 21 & 6 & 19 \\
-                    \end{bmatrix}
-
-                    \ast
-
-                    \begin{bmatrix}
-                    1 & 2 & 1 \\
-                    0 & 0 & 0 \\
-                    -1 & -2 & -1 \\
-                    \end{bmatrix}
-
-                    =
-                    $$
-                    $$
-                    \begin{bmatrix}
-                    9 & -17 & -20 & -39 & -32 & -31 & -8 & 18 \\
-                    -12 & -237 & -476 & -689 & -681 & -448 & -231 & -10 \\
-                    -11 & -246 & -470 & -690 & -697 & -473 & -260 & -44 \\
-                    17 & 3 & 2 & -13 & -9 & 0 & 26 & 10 \\
-                    -7 & -4 & -23 & -9 & -8 & 10 & 35 & 49 \\
-                    24 & 265 & 481 & 712 & 724 & 478 & 228 & -1 \\
-                    32 & 247 & 490 & 718 & 726 & 468 & 211 & -44 \\
-                    -31 & -9 & -2 & 2 & -15 & -7 & -2 & -3 \\
-                    \end{bmatrix}
-                    $$
-
-                    Figure 2 shows a visualization of this example with the input matrix, filter matrix, and output
-                    matrix in grayscale:
-
-                <figure class="text-center">
-                    <img src="img/feature_extraction/input.png" alt="Input matrix in gray scale view" width="231"
-                        height="231">
-                    <img src="img/feature_extraction/filter.png" alt="Filter matrix in gray scale view" width="231"
-                        height="231">
-                    <img src="img/feature_extraction/output.png" alt="Output matrix in gray scale view" width="231"
-                        height="231">
-                    <figcaption><strong>Figure 5:</strong> Matrix Visualization</figcaption>
-                </figure>
-                </p>
-                <p>
-                    This process of object detection using CNNs is similar to the <a href="#hobd_2">second</a> and <a
-                        href="#hobd_3">third</a> steps a human would take to identify an object. In YOLO, CNNs use this
-                    technique to both locate and classify objects. To better understand the impact of feature extraction
-                    on object detection, we have prepared a real image below to demonstrate the process of feature
-                    extraction. We have used four different filters from a real DeepSORT trained model's first layer.
-                    You can choose which filter to apply using the slider, allowing you to see the image before and
-                    after the filter is applied. This interactive demonstration will help you gain insight into how
-                    feature extraction affects object detection. Try dragging the slider and selecting a filter from the
-                    dropdown menu to see the difference:
-                </p>
-                <div class="framed" style="margin-bottom: 20px">
-                    <!-- Additional class for responsiveness -->
-                    <div class="inside">
-                        <!-- Frame top blue text -->
-                        <div class="eyebrow">
-                            YOLO Extract feature from image (apply filter)
-                        </div>
-                        <div class="yolo-extract-container">
-                            <div class="yolo-extract-image">
-                                <div class="img background-img"></div>
-                                <div class="img foreground-img"></div>
-                                <input type="range" min="1" max="100" value="50" id="slider" class="slider"
-                                    name="slider">
-                                <div class='slider-button'></div>
-                            </div>
-                            <div class="yolo-extract-filter">
-                                <select name="filter" id="filter"></select>
-                                <div class="filter-box">
-                                    <img class="filter" src="img/filter/filter1.jpg"></img>
-                                    <p class="filter-text">filter matrix</p>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Frame caption -->
-                        <div class="caption"><b>Figure 6:</b> YOLO Extract feature from image (apply filter)</div>
-                        <script src="js/yolo_extract.js"></script>
-                    </div>
-                </div>
-                <p>
-                    1. Component Introduction:
-                    A component can let user try to do convolution operation on
-                    image. User can choose the image and filter matrix to
-                    convolution. The result will be shown when user drag the
-                    slider.
-                </p>
-
-                <p>
-                    2. User's Experience:
-                    User will know how the convolution operation do on image,
-                    and they can see after convolution, the image's edge will
-                    be prominent.
-                </p>
-
-                <p>
-                    3. How to use?:
-                    Select the filter matrix, and drag the slider to see the
-                    result.
-                </p>
-
-                <p>
-                    4. What user will learn?:
-                    User will discover the convolution operation can extract
-                    the feature from image, but the result may not always
-                    extracted the feature usable for indentifying object.
-                </p>
-
-
-                <h3>IOU Confidence and Label Prediction</h3> (ai)
-                <p>
-                    In the previous section, we learned how to extract low-level features, such as object edges, from an
-                    image. In this section, we will explore higher-level features that can provide more information
-                    about the object, such as its type and the probability of it being present in the image.
-                </p>
-                <p>
-                    Unlike the edge features from the previous section, these higher-level features can be easier to
-                    understand when visualizing them. They detect patterns in the image and provide useful information
-                    about the object. In this section, we will show four different feature maps that highlight different
-                    patterns of the object. You can use these feature maps to guess the object's position by drawing a
-                    bounding box on a canvas. We will then tell you the IoU (Intersection over Union) of your bounding
-                    box and the object's true position bounding box. The IoU is a metric that measures the ratio of
-                    overlap between two bounding boxes. The higher the IoU, the more overlap between the two bounding
-                    boxes.
-                </p>
-
-                <p>
-                    In general, an IoU score above 0.5 is considered a good match. The IoU score is calculated using the
-                    following formula:
-                    $$IoU = \frac{Area\ of\ Overlap}{Area\ of\ Union}$$
-                    Although the formula looks simple, it can be difficult to visualize. The following figure
-                    illustrates the calculation of IoU to help you better understand it:
-                </p>
-
-                <figure class="text-center">
-                    <img src="img/iou/iou_visualizations.jpg" alt="IoU visualization" width="864" height="626">
-                    <figcaption><strong>Figure 7:</strong> IoU visualization</figcaption>
-                </figure>
-
-                <p>
-                    Now, let's try to identify the object's type and location from the feature maps shown below. We will
-                    provide you with the IoU score of your identified location and type, and let you know if your
-                    identification is correct:
-                </p>
-                <p>
-                    Hint: The feature map on the top left corner may indicate the probability of a scooter, while the
-                    feature maps on the top right and bottom left corners may indicate the probability of a car. The
-                    feature map on the bottom right corner may indicate the probability of a large vehicle.
-                </p>
-
-                <div class="framed" style="margin-bottom: 20px">
-                    <!-- Additional class for responsiveness -->
-                    <div class="inside">
-                        <!-- Frame top blue text -->
-                        <div class="eyebrow">
-                            YOLO IOU confidence and Label Predict
-                        </div>
-                        <div class="text-center"> 
-                            <p>Drag on blank canvas left hand side to guess the object's position, and submit to see the result.</p>
-                            <p>The following is four feature maps indicates the probability of object exist, try to find the object!</p>
-                            <span>Don't forget to guess the object type!</span>
-                            <p></p>
-                        </div>
-                        <div class="yolo-iou-container">
-                            <div class="iou-img">
-                                <img src="./img/test.png" alt="">
-                            </div>
-                            <div class="user-iou">
-                                <canvas id="iou-canvas" class="iou-canvas" width="384" height="145"></canvas>
-                                <div>
-                                    <p>IoU = <span id="iou-result"> To be calculated...</span></p>
-                                    <label for="iou-class"><p>Select object type: </p></label>
-                                    <select name="iou-class" id="iou-class"  ></select>
-                                    <p id="iou-result-correct"></p>
-                                    <button class="iou-btn">Submit</button>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Frame caption -->
-                        <div class="caption"><b>Figure 8:</b>YOLO IoU confidence and Label Predict</div>
-                        <script src="js/yolo_iou.js"></script>
-                    </div>
-                </div>
-
-                <p>
-                    1. Component Introduction:
-                    A component can let user try to identified the object
-                    position and label the object from feature maps. User
-                    will see 4 feature maps from YOLO, and they will learn
-                    where the object is and what the object is from feature
-                    maps through the process.
-                </p>
-
-                <p>
-                    2. User's Experience:
-                    User will know how YOLO identify the object with the image
-                    that is be doing convolution operation.
-                </p>
-
-                <p>
-                    3. How to use?:
-                    User will draw the bbox on the blank canva, and we will
-                    calculate the IOU between user's bbox and real object.
-                    User will also try to label the object from feature maps
-                    they see, and we will tell user right or wrong.
-                </p>
-
-                <p>
-                    4. What user will learn?:
-                    They will learn what information contained in feature
-                    maps, and how YOLO identify the object with those
-                    feature maps. And know it's need training to get the
-                    right label and bbox.
-                </p>
-
-
-                <h3>Filtering False Positives with Confidence Threshold</h3> (not ai)
-                <p>
-                    Now that we have learned how YOLO predicts the position and label of objects in an image,
-                    let's take a closer look at the results it produces. However, YOLO is prone to producing
-                    false positives, which are bounding boxes that do not actually contain an object. To
-                    address this issue, we can filter out false positives by setting a confidence threshold
-                    for the predicted bounding boxes.
-                </p>
-                <p>
-                    YOLO calculates a confidence score for each bounding box it predicts, based on the IoU
-                    metric we learned about earlier. We can set a minimum threshold for the confidence score,
-                    and discard any bounding boxes with scores below this threshold. By doing so, we can improve
-                    the accuracy of the object detection results.
-                </p>
-                <p>
-                    In the interactive element below, you can adjust the confidence threshold and see how it
-                    affects the predicted bounding boxes. Try dragging the scroll bar to adjust the threshold
-                    and observe how the false positives are filtered out as the threshold increases.
-                </p>
 
                 <div class="framed" style="margin-bottom: 20px; width:1300px;">
                     <!-- Additional class for responsiveness -->
@@ -796,36 +415,10 @@
                             </div>
                         </div>
                         <!-- Frame caption -->
-                        <div class="caption"><b>Figure 9:</b>Filtering False Positives with Confidence Threshold</div>
+                        <div class="caption"><b>Figure 6:</b>Filtering False Positives with Confidence Threshold</div>
                         <script src="js/yolo_filter.js"></script>
                     </div>
                 </div>
-                <p>
-                    1. Component Introduction:
-                    A component can let user try to filter out the low confidence bbox.
-                    User can adjust the threshold of confidence, and the number of bbox
-                    will change in real time.
-                </p>
-                <p>
-                    2. User's Experience:
-                    User will know it is important to set the threshold of confidence,
-                    and how to set the threshold of confidence according to the result
-                    YOLO give.
-                </p>
-                <p>
-                    3. How to use?:
-                    User can adjust the threshold of confidence by the scroll bar, and
-                    the number of bbox will change in real time.
-                </p>
-                <p>
-                    4. What user will learn?:
-                    They will learn how to set the threshold of confidence according to
-                    the result YOLO give. And know that it is hard to set a perfect
-                    threshold of confidence because it might too high to filter in the
-                    right bbox or too low to filter out the wrong bbox.
-                </p>
-
-
             </section>
 
 
