@@ -278,9 +278,11 @@
                     most classical object detection algorithm,  as an example as YOLO family are 
                     open-sourced and production-ready object detection algorithms []. 
                     
-                    As object detection is a supervised task, it is necessary to execute data labeling to 
-                    improve the accuracy of the pretrained model of YOLO. First of all, several frames From
-                    videos are selected. Each vehicle in a frame is mark by a rectangle box. This box can be 
+                    As object detection is a supervised task, it is necessary to prepare training datasets for training
+                    a YOLO model. Fortunately, the pretrained model of YOLO is available so that we can only label 
+                    affortable amout of vehicle to obtain a YOLO model that fits the vehicle detection task in this paper. 
+                    To label vehicle data, first of all, several frames From videos are selected. 
+                    Each vehicle in a frame is mark by a rectangle box. This box can be 
                     represented into the format of (<i>class</i>, <i>x_center</i>>, <i>y_center</i>>, 
                     <i>width</i>,<i>height</i>) where <i>class</i> represent
                     the type of vehicle, <i>x_center</i> and <i>y_center</i> represent the x-coordinate and y-coordinate
@@ -340,7 +342,7 @@
                     known patterns to determine what the object is. By applying multiple checks and prior experiences,
                     YOLO filters out low-confidence objects and accurately identifies the positions of cars in the
                     video. 
-                    
+
                     <ol>
                         <li class="inline-math" id="yolop_1">When given an image, YOLO takes each pixel's RGB color as input
                             to its Convolutional Neural Network (CNN) model. Each color (e.g. red represented as $(255, 0,
