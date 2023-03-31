@@ -1,84 +1,111 @@
-var frame = 1;
-let canvas = new fabric.Canvas("ac", { selection: false, uniformScaling: false });
-class Clonable_Rect {
-    constructor(id, label, left, top, width, height, stroke, fill, scaleX, scaleY, strokeDashArray) {
-      this.id = id;
-      this.label = label;
-      this.left = left;
-      this.top = top;
-      this.width = width;
-      this.height = height;
-      this.strokeWidth = 2;
-      this.stroke = stroke;
-      this.fill = fill;
-      this.cornerStyle = "circle";
-      this.transparentCorners = false;
-      this.lockRotation = true;
-      this.hasControls = true;
-      this.strokeUniform = true;
-      this.noScaleCache = false;
-      this.scaleX = scaleX;
-      this.scaleY = scaleY;
-      this.strokeDashArray = strokeDashArray;
+(async () => {
+    var frame = 1;
+    let canvas = new fabric.Canvas("ac", {
+        selection: false,
+        uniformScaling: false,
+    });
+    class Clonable_Rect {
+        constructor(
+            id,
+            label,
+            left,
+            top,
+            width,
+            height,
+            stroke,
+            fill,
+            scaleX,
+            scaleY,
+            strokeDashArray,
+        ) {
+            this.id = id;
+            this.label = label;
+            this.left = left;
+            this.top = top;
+            this.width = width;
+            this.height = height;
+            this.strokeWidth = 2;
+            this.stroke = stroke;
+            this.fill = fill;
+            this.cornerStyle = "circle";
+            this.transparentCorners = false;
+            this.lockRotation = true;
+            this.hasControls = true;
+            this.strokeUniform = true;
+            this.noScaleCache = false;
+            this.scaleX = scaleX;
+            this.scaleY = scaleY;
+            this.strokeDashArray = strokeDashArray;
+        }
     }
-}
-function cloneRect(rectArr){
-    let clonedRectArr = [];
-    rectArr.forEach((item) => {
-        let clonedRect = new Clonable_Rect(item.id, item.label, item.left, item.top, item.width, item.height, item.stroke, item.fill, item.scaleX, item.scaleY, item.strokeDashArray);
-        clonedRectArr.push(clonedRect);
-    });
-    return clonedRectArr;
-}
-function loadRect(clonedRectArr){
-    rectArr = [];
-    $("#ac-labels tr").each(function () {
-        $(this).remove();
-    });
-    let row = $(`
+    function cloneRect(rectArr) {
+        let clonedRectArr = [];
+        rectArr.forEach((item) => {
+            let clonedRect = new Clonable_Rect(
+                item.id,
+                item.label,
+                item.left,
+                item.top,
+                item.width,
+                item.height,
+                item.stroke,
+                item.fill,
+                item.scaleX,
+                item.scaleY,
+                item.strokeDashArray,
+            );
+            clonedRectArr.push(clonedRect);
+        });
+        return clonedRectArr;
+    }
+    function loadRect(clonedRectArr) {
+        rectArr = [];
+        $("#ac-labels tr").each(function () {
+            $(this).remove();
+        });
+        let row = $(`
         <tr>
             <td style="width: 50px;">ID</td>
             <td>label</td>
             <td>state</td>
         </tr>`);
-    $("#ac-labels").append(row);
-    clonedRectArr.forEach((item) => {
-        let rect = new fabric.Rect({
-            id: item.id,
-            label: item.label,
-            left: item.left,
-            top: item.top,
-            width: item.width,
-            height: item.height,
-            strokeWidth: item.strokeWidth,
-            stroke: item.stroke,
-            fill: item.fill,
-            cornerStyle: item.cornerStyle,
-            transparentCorners: item.transparentCorners,
-            lockRotation: item.lockRotation,
-            hasControls: item.hasControls,
-            strokeUniform: item.strokeUniform,
-            noScaleCache: item.noScaleCache,
-            scaleX: item.scaleX,
-            scaleY: item.scaleY,
-            strokeDashArray: item.strokeDashArray
-        });
-        rect.setControlVisible("ml", false); // Middle left
-        rect.setControlVisible("mt", false); // Middle top
-        rect.setControlVisible("mr", false); // Middle right
-        rect.setControlVisible("mb", false); // Middle bottom
-        rect.setControlVisible("mtr", false); // Rotation
-        rectArr.push(rect);
-        occluded_selected = "";
-        exit_selected = "";
-        if (rect.fill === "rgba(0, 0, 0, 0)"){
-            occluded_selected = "selected";
-        }
-        else if (rect.fill === "rgba(0, 0, 0, 0.5)"){
-            exit_selected = "selected";
-        }
+        $("#ac-labels").append(row);
+        clonedRectArr.forEach((item) => {
+            let rect = new fabric.Rect({
+                id: item.id,
+                label: item.label,
+                left: item.left,
+                top: item.top,
+                width: item.width,
+                height: item.height,
+                strokeWidth: item.strokeWidth,
+                stroke: item.stroke,
+                fill: item.fill,
+                cornerStyle: item.cornerStyle,
+                transparentCorners: item.transparentCorners,
+                lockRotation: item.lockRotation,
+                hasControls: item.hasControls,
+                strokeUniform: item.strokeUniform,
+                noScaleCache: item.noScaleCache,
+                scaleX: item.scaleX,
+                scaleY: item.scaleY,
+                strokeDashArray: item.strokeDashArray,
+            });
+            rect.setControlVisible("ml", false); // Middle left
+            rect.setControlVisible("mt", false); // Middle top
+            rect.setControlVisible("mr", false); // Middle right
+            rect.setControlVisible("mb", false); // Middle bottom
+            rect.setControlVisible("mtr", false); // Rotation
+            rectArr.push(rect);
+            occluded_selected = "";
+            exit_selected = "";
+            if (rect.fill === "rgba(0, 0, 0, 0)") {
+                occluded_selected = "selected";
+            } else if (rect.fill === "rgba(0, 0, 0, 0.5)") {
+                exit_selected = "selected";
+            }
 
-        let row = $(`
+            let row = $(`
             <tr>
                 <td style="width: 50px;">${rect.id}</td>
                 <td>
@@ -118,7 +145,7 @@ function loadRect(clonedRectArr){
                         label: e.target.value,
                     });
                 }
-            }
+            };
             row.find("#type").change((e) => {
                 let id = row.find("td:first").text();
                 rectArr.forEach((rect) => {
@@ -129,24 +156,22 @@ function loadRect(clonedRectArr){
                 changeType(e);
                 canvas.renderAll();
             });
-            
 
             let changeState = (e) => {
                 if (e.target.value === "Occluded") {
                     testRect.set({
                         strokeDashArray: [5, 5],
-                        fill: "rgba(0, 0, 0, 0)"
+                        fill: "rgba(0, 0, 0, 0)",
                     });
                 } else if (e.target.value === "Exit") {
                     testRect.set({
                         strokeDashArray: [5, 5],
-                        fill: "rgba(0, 0, 0, 0.5)"
+                        fill: "rgba(0, 0, 0, 0.5)",
                     });
                 } else {
                     testRect.set({
                         strokeDashArray: [0, 0],
                     });
-                            
 
                     if (testRect.label === "car") {
                         testRect.set({
@@ -164,9 +189,8 @@ function loadRect(clonedRectArr){
                             fill: "rgba(0, 0, 255, 0.2)",
                         });
                     }
-                    
                 }
-            }
+            };
             row.find("#state").change((e) => {
                 let id = row.find("td:first").text();
                 rectArr.forEach((rect) => {
@@ -178,19 +202,20 @@ function loadRect(clonedRectArr){
                 canvas.renderAll();
             });
 
-        $("#ac-labels").append(row);
-    });
-    return rectArr;
-}
+            $("#ac-labels").append(row);
+        });
+        return rectArr;
+    }
 
-
-(async () => {
     $("#ac-finish").hide();
     $("#ac-tip-finish").hide();
     $("#ac-timer").hide();
+    $("#ac-labels").hide();
 
-    
-    canvas.setBackgroundImage("data/annotation/frame_000360.PNG", canvas.renderAll.bind(canvas));
+    canvas.setBackgroundImage(
+        "data/annotation/frame_000360.PNG",
+        canvas.renderAll.bind(canvas),
+    );
     canvas.renderAll();
     let id = 0;
     let label = "car";
@@ -213,7 +238,7 @@ function loadRect(clonedRectArr){
         let now = new Date().getTime();
         timer = setInterval(() => {
             let timeElapsed = new Date().getTime() - now;
-            sec = timeElapsed.toString().slice(0,-3);
+            sec = timeElapsed.toString().slice(0, -3);
             ms = timeElapsed % 1000;
             $("#ac-timer").text(`${sec}.${ms}s`);
         }, 1);
@@ -226,21 +251,28 @@ function loadRect(clonedRectArr){
         $("#ac-finish").hide();
         $("#tip-finish").hide();
         $("#ac-totalSec").text(`Time: ${sec}.${ms}s`);
-        $("#ac-perSec").text(`Time cost per frame (average): ${Math.round((parseInt(sec)/41) * 100) / 100} s`)
+        $("#ac-perSec").text(
+            `Time cost per frame (average): ${
+                Math.round((parseInt(sec) / 41) * 100) / 100
+            } s`,
+        );
         $("#next-frame").prop("disabled", true);
         $("#prev-frame").prop("disabled", true);
-        
     });
 
     $("#next-frame").click(() => {
         console.log(frame);
         $("#ac-labels tr").each(function () {
-            $(this).css({"background-color":"transparent", "border": "none"});
+            $(this).css({ "background-color": "transparent", border: "none" });
         });
         if (rectframeArr.length > frame) {
-            
-            canvas.setBackgroundImage("data/annotation/frame_000"+(frame+360).toString()+".PNG", canvas.renderAll.bind(canvas));
-            console.log("data/annotation/frame_000"+(frame+360).toString()+".PNG");
+            canvas.setBackgroundImage(
+                "data/annotation/frame_000" + (frame + 360).toString() + ".PNG",
+                canvas.renderAll.bind(canvas),
+            );
+            console.log(
+                "data/annotation/frame_000" + (frame + 360).toString() + ".PNG",
+            );
             canvas.renderAll();
             rectArr.forEach((item) => {
                 if (item.fill == "rgba(0, 0, 0, 0.5)") {
@@ -255,8 +287,7 @@ function loadRect(clonedRectArr){
                             });
                         }
                     });
-                }
-                else{
+                } else {
                     rectframeArr.forEach((element, count) => {
                         if (count >= frame) {
                             let is_in = false;
@@ -266,7 +297,19 @@ function loadRect(clonedRectArr){
                                 }
                             });
                             if (!is_in) {
-                                itemm = new Clonable_Rect(item.id, item.label, item.left, item.top, item.width, item.height, item.stroke, item.fill, item.scaleX, item.scaleY, item.strokeDashArray);
+                                itemm = new Clonable_Rect(
+                                    item.id,
+                                    item.label,
+                                    item.left,
+                                    item.top,
+                                    item.width,
+                                    item.height,
+                                    item.stroke,
+                                    item.fill,
+                                    item.scaleX,
+                                    item.scaleY,
+                                    item.strokeDashArray,
+                                );
                                 element.push(itemm);
                             }
                         }
@@ -280,17 +323,20 @@ function loadRect(clonedRectArr){
                 canvas.add(item);
             });
             canvas.renderAll();
-        }
-        else {
-            canvas.setBackgroundImage("data/annotation/frame_000"+(frame+360).toString()+".PNG", canvas.renderAll.bind(canvas));
-            console.log("data/annotation/frame_000"+(frame+360).toString()+".PNG");
+        } else {
+            canvas.setBackgroundImage(
+                "data/annotation/frame_000" + (frame + 360).toString() + ".PNG",
+                canvas.renderAll.bind(canvas),
+            );
+            console.log(
+                "data/annotation/frame_000" + (frame + 360).toString() + ".PNG",
+            );
             canvas.renderAll();
             if (rectframeArr.length == frame) {
-                rectframeArr[frame-1] = cloneRect(rectArr);
-            }
-            else {
+                rectframeArr[frame - 1] = cloneRect(rectArr);
+            } else {
                 rectframeArr.push(cloneRect(rectArr));
-                rectArr.forEach(element => {
+                rectArr.forEach((element) => {
                     if (element.fill == "rgba(0, 0, 0, 0.5)") {
                         canvas.remove(element);
                         rectArr.splice(rectArr.indexOf(element), 1);
@@ -299,27 +345,31 @@ function loadRect(clonedRectArr){
             }
         }
         if (frame == 40) {
-            $("#next-frame").prop('disabled', true);
+            $("#next-frame").prop("disabled", true);
         }
         if (frame >= 1) {
-            $("#prev-frame").prop('disabled', false);
+            $("#prev-frame").prop("disabled", false);
         }
         frame++;
         console.log(rectframeArr);
-        
     });
     $("#prev-frame").click(() => {
         console.log(frame);
         $("#ac-labels tr").each(function () {
-            $(this).css({"background-color":"transparent", "border": "none"});
+            $(this).css({ "background-color": "transparent", border: "none" });
         });
         if (frame == 1) {
             return;
         }
         rectframeArr[frame - 1] = cloneRect(rectArr);
         rectArr = loadRect(rectframeArr[frame - 2]);
-        console.log("data/annotation/frame_000"+(frame+358).toString()+".PNG");
-        canvas.setBackgroundImage("data/annotation/frame_000"+(frame+358).toString()+".PNG", canvas.renderAll.bind(canvas));
+        console.log(
+            "data/annotation/frame_000" + (frame + 358).toString() + ".PNG",
+        );
+        canvas.setBackgroundImage(
+            "data/annotation/frame_000" + (frame + 358).toString() + ".PNG",
+            canvas.renderAll.bind(canvas),
+        );
         canvas.renderAll();
         canvas.clear();
         rectArr.forEach((item) => {
@@ -327,56 +377,55 @@ function loadRect(clonedRectArr){
         });
         canvas.renderAll();
         if (frame == 2) {
-            $("#prev-frame").prop('disabled', true);
+            $("#prev-frame").prop("disabled", true);
         }
         if (frame <= 41) {
-            $("#next-frame").prop('disabled', false);
+            $("#next-frame").prop("disabled", false);
         }
         frame--;
-        
     });
 
-    fabric.Object.prototype.controls.deleteControl.mouseUpHandler = deleteObject;
+    fabric.Object.prototype.controls.deleteControl.mouseUpHandler =
+        deleteObject;
     function deleteObject(eventData, transform) {
         let target = transform.target;
         let canvas = target.canvas;
         rectArr = rectArr.filter((item) => item != target);
         canvas.remove(target);
-        console.log(target.id);
         canvas.requestRenderAll();
         $("#ac-labels tr").each(function () {
             if ($(this).find("td:first").text() == target.id) {
                 $(this).remove();
             }
         });
-        rectframeArr.forEach(element => {
-            element.forEach(item => {
+        rectframeArr.forEach((element) => {
+            element.forEach((item) => {
                 if (item.id == target.id) {
                     element.splice(element.indexOf(item), 1);
                 }
-            }
-            );
+            });
         });
-        // if (rectArr.length == 0) $("#ac-labels").hide();
-        // else $("#ac-labels").show();
-
     }
     canvas.on("mouse:down", function (o) {
         if (o.target != null) {
             isNull = false;
             $("#ac-labels tr").each(function () {
                 if ($(this).find("td:first").text() == o.target.id) {
-                    $(this).css({"background-color":"yellow", "border": "1px dashed black"});
+                    $(this).css({
+                        "background-color": "yellow",
+                        border: "1px dashed black",
+                    });
+                } else {
+                    $(this).css({
+                        "background-color": "transparent",
+                        border: "none",
+                    });
                 }
-                else {
-                    $(this).css({"background-color":"transparent", "border": "none"});
-                }
-    
             });
             return;
         }
         $("#ac-labels tr").each(function () {
-            $(this).css({"background-color":"transparent", "border": "none"});
+            $(this).css({ "background-color": "transparent", border: "none" });
         });
         isDown = true;
         isNull = true;
@@ -437,23 +486,31 @@ function loadRect(clonedRectArr){
             if (rect.width < 10 || rect.height < 10) {
                 canvas.remove(rect);
                 rectArr.splice(rectArr.indexOf(rect), 1);
-                // if (rectArr.length == 0) $("#ac-labels").hide();
-                // else $("#ac-labels").show();
+                if (rectArr.length == 0) $("#ac-labels").hide();
+                else $("#ac-labels").show();
                 return;
-            }
-            else{
+            } else {
                 rectframeArr.forEach((element, index) => {
-                    if (index > frame-1) {
+                    if (index > frame - 1) {
                         item = rect;
-                        let clonedRect = new Clonable_Rect(item.id, item.label, item.left, item.top, item.width, item.height, item.stroke, item.fill, item.scaleX, item.scaleY, item.strokeDashArray);
-                        element.push(clonedRect)
+                        let clonedRect = new Clonable_Rect(
+                            item.id,
+                            item.label,
+                            item.left,
+                            item.top,
+                            item.width,
+                            item.height,
+                            item.stroke,
+                            item.fill,
+                            item.scaleX,
+                            item.scaleY,
+                            item.strokeDashArray,
+                        );
+                        element.push(clonedRect);
                     }
                 });
-                
             }
             let { tl, tr, bl, br } = rect.lineCoords;
-            console.log("wtfff");
-            console.log(rect)
             let row = $(`
             <tr>
                 <td style="width: 50px;">${rect.id}</td>
@@ -474,6 +531,7 @@ function loadRect(clonedRectArr){
             </tr>
             `);
 
+            $("#ac-labels").show();
             $("#ac-labels").append(row);
 
             let testRect = rect;
@@ -497,7 +555,7 @@ function loadRect(clonedRectArr){
                         label: e.target.value,
                     });
                 }
-            }
+            };
             row.find("#type").change((e) => {
                 let id = row.find("td:first").text();
                 rectArr.forEach((rect) => {
@@ -508,18 +566,17 @@ function loadRect(clonedRectArr){
                 changeType(e);
                 canvas.renderAll();
             });
-            
 
             let changeState = (e) => {
                 if (e.target.value === "Occluded") {
                     testRect.set({
                         strokeDashArray: [5, 5],
-                        fill: "rgba(0, 0, 0, 0)"
+                        fill: "rgba(0, 0, 0, 0)",
                     });
                 } else if (e.target.value === "Exit") {
                     testRect.set({
                         strokeDashArray: [5, 5],
-                        fill: "rgba(0, 0, 0, 0.5)"
+                        fill: "rgba(0, 0, 0, 0.5)",
                     });
                 } else {
                     testRect.set({
@@ -541,9 +598,8 @@ function loadRect(clonedRectArr){
                             fill: "rgba(0, 0, 255, 0.2)",
                         });
                     }
-                    
                 }
-            }
+            };
             row.find("#state").change((e) => {
                 let id = row.find("td:first").text();
                 rectArr.forEach((rect) => {
@@ -554,7 +610,7 @@ function loadRect(clonedRectArr){
                 changeState(e);
                 canvas.renderAll();
             });
-            id++
+            id++;
         }
     });
 })();

@@ -306,10 +306,7 @@
                             <div id="tip">
                                 <div class="text-center">
                                     <p id="tip-start">Click the start button to annotating the car in the image.</p>
-                                    <span id="tip-finish">
-                                        <p>Click the finish button when your annotation is done.</p>
-                                        <p>Click on the canvas to draw a bounding box around the car, and select the car type.</p>
-                                    </span>
+                                    <p id="tip-finish">Click the finish button when your annotation is done.</p>
                                     <button id="btn-start">Start</button>
                                     <button id="btn-finish">Finish</button>
                                     <button id="btn-reset">Reset</button>
@@ -320,12 +317,6 @@
                                 <div class="canvas-wrapper-simple">
                                     <canvas id="annotation-canvas" width="656" height="494"></canvas>
                                 </div>
-                                <table id="labels">
-                                    <tr>
-                                        <td>ID</td>
-                                        <td>label</td>
-                                    </tr>
-                                </table>
                             </div>
                         </div>
                         <!-- Frame caption -->
@@ -1417,21 +1408,25 @@
                                 <div class="canvas-wrapper">
                                     <canvas id="ac" width="656" height="494"></canvas>
                                 </div>
-                                <table id="ac-labels">
-                                    <tr>
-                                        <td style="width: 50px;">ID</td>
-                                        <td>label</td>
-                                        <td>state</td>
-                                    </tr>
-                                </table>
+                                <div style="width:25%">
+                                    <table id="ac-labels">
+                                        <tr>
+                                            <td style="width: 50px;">ID</td>
+                                            <td>label</td>
+                                            <td>state</td>
+                                        </tr>
+                                    </table>
+                                </div>
                             </div>
-                            <div class="frame-btn">
+                            <div id="frame-btn">
                                 <button id="prev-frame" disabled="true">Backward</button>
                                 <button id="next-frame" disabled="true">Forward</button>
                                 <button id="ac-finish">Complete</button>
-                                <p><span id="ac-timer"></span></p>
-                                <p><span id="ac-totalSec"></span></p>
-                                <p><span id="ac-perSec"></span></p>
+                                <div>
+                                    <p id="ac-timer"></p>
+                                    <p id="ac-totalSec"></p>
+                                    <p id="ac-perSec"></p>
+                                </div>
                             </div>
                         </div>
                         <!-- Frame caption -->
