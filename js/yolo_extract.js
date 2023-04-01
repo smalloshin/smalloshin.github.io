@@ -10,11 +10,6 @@ for (let i = 1; i <= 4; i++) {
     );
 }
 
-// const filterArr = ["filter #1", "filter #2", "filter #3"];
-// $.each(filterArr, (val, text) => {
-//     $("#filter").append($("<option></option>").attr("value", val).text(text));
-// });site_files/img/filter/filter1.jpg
-
 $("#filter").change(() => {
     let val = $("#filter").val();
 
