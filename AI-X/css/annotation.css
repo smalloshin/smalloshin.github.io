@@ -1,0 +1,94 @@
+.annotation-container {
+    width: 1000px;
+    margin: 0 auto; 
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.ac-container {
+    width: 1100px;
+    margin: 0 auto; 
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+#tip {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin: 2px 0;
+}
+
+.canvas-wrapper, .canvas-wrapper.simple {
+    width: 75%;
+    display:flex;
+    justify-content: center;
+    position: relative;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.sub-container {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+}
+
+#overlay, #ac-overlay {
+    width: 105%;
+    height: 100%;
+    background: #fff;
+    position: absolute;
+    z-index: 10;
+    opacity: 0.3;
+}
+
+#annotation-canvas, #yolo-canvas {
+    border: 1px solid gray;
+}
+
+#yolo-canvas {
+    margin-top: 20px;
+}
+
+#labels, #yolo-labels{
+    width: 150px;
+    text-align: center;
+}
+
+#ac-labels > tbody > tr > td{
+    width: 120px;
+    height: 30px;
+}
+
+#btn-start, #btn-finish, #btn-reset, #ac-start, #ac-finish, #prev-frame, #next-frame {
+    padding: 6px 8px;
+    font-size: 1rem;
+    outline: none;
+    margin: 10px 0;
+}
+
+#prev-frame, #next-frame, #ac-finish {
+    margin-top: 20px;
+    margin-left: 25px;
+}
+
+#yolo-result {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+#frame-btn {
+    padding: 0 5.5%;
+}
+
+#frame-btn > div {
+    padding: 0 2.5%;
+}

@@ -1,0 +1,829 @@
+<!doctype html>
+<html lang="en">
+    <!-- 1m cron final testssssss -->
+<head>
+    <!-- Required meta tags for IEEE Xplore immersive article -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description"
+        content="An interactive article on using YOLO object detection and DeepSORT tracking algorithm to extract traffic volume from CCTV video recorded in a Transportation System. Learn how YOLO and DeepSORT work, and how to apply them in to a real-world scenario.">
+    <meta charset="utf8">
+    <title>Measuring Intersection Turning Volume through Computer Vision Techniques
+    </title>
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <!-- Stylesheet for IEEE Xplore immersive article -->
+    <link rel="stylesheet" href="fonts/stylesheet.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/yolo_extract.css">
+    <link rel="stylesheet" href="css/yolo_filter.css">
+    <link rel="stylesheet" href="css/ds_demo.css">
+    <link rel="stylesheet" href="css/yolo_deepsort.css">
+    <link rel="stylesheet" href="css/introdction.css">
+    <link rel="stylesheet" href="css/annotation.css">
+    <link rel="stylesheet" href="css/hungarian.css">
+    <link rel="stylesheet" href="css/track.css">
+    <link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css">
+    <script src="https://tikzjax.com/v1/tikzjax.js"></script>
+    <!-- MathJax javascript library and implementation file/s -->
+    <script type="text/javascript" async
+        src="https://xploreqa.ieee.org/xploreAssets/MathJax-274/MathJax.js?config=default">
+    </script>
+    <!-- Example chessboard immersive app -->
+    <script type="text/javascript" src="https://xploreqa.ieee.org/assets/vendor/jquery/jquery-3.5.1.min.js"></script>
+    <script type="text/javascript" src="./js/jquery.csv.min.js"></script>
+    <script src="./js/fabric.min.js.js"
+        integrity="sha512-P6uimDKoj1nnPSo2sPmgbZy99pPq9nHXhLwddOnLi1DC+fEM83FEUcHPRPifbx1rlRkdMinViaWyDfG45G9BuA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- <script src="js/onnx.min.js"></script> -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxjs@0.1.7/dist/onnx.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.4/d3.min.js"></script>
+</head>
+
+<body>
+    <!-- Article with large top spacing -->
+    <article class="mt-lg">
+        <header>
+            <!-- Page container -->
+            <div class="container">
+                <!-- Page title -->
+                <h1>
+                    Measuring Intersection Turning Volume through Computer Vision Techniques
+                </h1>
+                <!-- Subheading -->
+                <p class="subhead">
+                    An interactive article on illustrating an automated pipeline for measuring intersection
+                    turning volume through a series of computer vision techniques. Learn the concept and technique 
+                    details of YOLO and DeepSORT for object detection and object tracking algorithm, along with 
+                    a hot-region-based approach for intersection turning volume calculation.
+                </p>
+                <!-- Header info general wrapper -->
+                <div class="header-info">
+                    <!-- Header left info box -->
+                    <div class="header-left box">
+                        <!-- Header authors section -->
+                        <div class="header-authors">
+                            <h2>Authors</h2>
+                            <ul>
+                                <li>Kuan-Chuan Chou | National Chung Hsing University, Taiwan</li>
+                                <li>Wei-Cheng Chen | National Chung Hsing University, Taiwan</li>
+                                <li>Min-Hsien Hung | National Chung Hsing University, Taiwan</li>
+                                <li>Li-Chun Chang | National Chung Hsing University, Taiwan</li>
+                                <li>Chih-Chieh Hung | National Chung Hsing University, Taiwan</li>
+                            </ul>
+                        </div>
+                        <!-- Published info section -->
+                        <div class="header-published">
+                            <!-- <h2>Published</h2>
+                            <p>Jan. 20, 2023</p> -->
+                        </div>
+                    </div>
+                    <!-- Header legend section -->
+                    <div class="header-legend">
+                        <svg class="click-icon" data-name="Click" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 83.62 122.88">
+                            <title>Click</title>
+                            <path
+                                d="M40.59,14.63a3.36,3.36,0,0,1-1,2.39l0,0a3.39,3.39,0,0,1-4.77,0,3.42,3.42,0,0,1-1-2.4V3.39A3.4,3.4,0,0,1,37.2,0a3.34,3.34,0,0,1,2.39,1,3.39,3.39,0,0,1,1,2.4V14.63Zm25,76.65a1.89,1.89,0,0,1,3.77,0V99.9a1.89,1.89,0,1,1-3.77,0V91.28ZM54.46,87.47a1.89,1.89,0,0,1,3.77,0V99.9a1.89,1.89,0,1,1-3.77,0V87.47Zm-28-7.63a1.92,1.92,0,0,1-.35-.23q-5.24-4.24-10.44-8.53a8.36,8.36,0,0,0-3.57-1.79,3.54,3.54,0,0,0-2,.09A2,2,0,0,0,9,70.49a6.9,6.9,0,0,0-.4,3.24,12.47,12.47,0,0,0,1.11,4,26.49,26.49,0,0,0,2.92,4.94l17.68,26.74a2.37,2.37,0,0,1,.36,1,15.28,15.28,0,0,0,1.87,6.4,2.89,2.89,0,0,0,2.57,1.46c9,0,18.62-.34,27.53,0a8.33,8.33,0,0,0,4.69-1.51,15,15,0,0,0,4.29-5l.34-.57c3.4-5.87,6.71-11.57,7-18.33L78.85,85l0-.33,0-1.84c.06-5.74.16-14.54-4.62-15.4H71.14c.09,2.46,0,5-.18,7.3-.08,1.36-.15,2.63-.15,3.79a2.31,2.31,0,1,1-4.62,0c0-1.1.08-2.52.17-4,.32-5.73.75-13.38-3.24-14.14h-3a2.2,2.2,0,0,1-.58-.07,69.07,69.07,0,0,1-.13,8.29c-.07,1.36-.15,2.63-.15,3.79a2.31,2.31,0,1,1-4.61,0c0-1.1.08-2.52.16-4,.33-5.73.76-13.38-3.24-14.14h-3a2,2,0,0,1-.6-.08V66a2.31,2.31,0,1,1-4.61,0V42c0-4-1.64-6.55-3.73-7.61a5.32,5.32,0,0,0-4.71-.06l-.1.06c-2.07,1-3.69,3.59-3.69,7.7v42a2.31,2.31,0,1,1-4.62,0V79.84Zm44.14-17a2.49,2.49,0,0,1,.61-.08h3.19a2.33,2.33,0,0,1,.53.06c8.73,1.4,8.61,12.65,8.52,20,0,3.4.14,6.78.18,10.17-.39,7.91-4,14.1-7.67,20.47l-.32.55A19.49,19.49,0,0,1,70,120.55a12.88,12.88,0,0,1-7.29,2.32H35.17a7.23,7.23,0,0,1-6.44-3.5,19,19,0,0,1-2.56-7.88L8.94,85.42A31,31,0,0,1,5.5,79.58,16.88,16.88,0,0,1,4,74a11.42,11.42,0,0,1,.8-5.42,6.54,6.54,0,0,1,3.55-3.49A8.05,8.05,0,0,1,13,64.76a13.19,13.19,0,0,1,5.61,2.77L26.45,74V42.09c0-6.1,2.73-10,6.22-11.82l.15-.06a9.81,9.81,0,0,1,4.33-1,10,10,0,0,1,4.49,1.07C45.16,32.06,47.91,36,47.91,42v7.6a2.41,2.41,0,0,1,.6-.08H51.7a2.33,2.33,0,0,1,.53.06c3.82.61,5.73,3.16,6.63,6.47a2.25,2.25,0,0,1,1.23-.36h3.18a2.26,2.26,0,0,1,.53.06c4.07.65,6,3.49,6.79,7.11ZM14.63,37A3.33,3.33,0,0,1,17,38a3.39,3.39,0,0,1-2.39,5.79H3.39a3.36,3.36,0,0,1-2.39-1A3.4,3.4,0,0,1,3.39,37ZM23,20.55a3.39,3.39,0,0,1-2.4,5.79,3.4,3.4,0,0,1-2.4-1l-7.91-7.94a3.42,3.42,0,0,1-1-2.4,3.39,3.39,0,0,1,5.79-2.4L23,20.55ZM59.2,43.81a3.41,3.41,0,0,1-3.4-3.4A3.41,3.41,0,0,1,59.2,37H70.43a3.35,3.35,0,0,1,2.4,1,3.4,3.4,0,0,1-2.4,5.79ZM55.62,24.74a3.39,3.39,0,0,1-4.8-4.8l7.91-8a3.39,3.39,0,0,1,4.8,4.8l-7.91,8Z" />
+                        </svg>
+                        <p>Indicates interactive elements</p>
+                    </div>
+                </div>
+                <!-- Box of anchored links -->
+                <div class="contents box">
+                    <h2>Contents:</h2>
+                    <ul>
+                        <li>
+                            <a href="#introduction">Introduction</a>
+                            <span class="separator">&nbsp;&nbsp;|&nbsp;&nbsp;</span>
+                        </li>
+                        <li>
+                            <a href="#yod">Object Detection Algorithm</a>
+                            <span class="separator">&nbsp;&nbsp;|&nbsp;&nbsp;</span>
+                        </li>
+                        <li>
+                            <a href="#dta">Object Tracking Algorithm</a>
+                            <span class="separator">&nbsp;&nbsp;|&nbsp;&nbsp;</span>
+                        </li>
+                        <li>
+                            <a href="#fttrwa">Intersection Turning Volume Calculation</a>
+                            <span class="separator">&nbsp;&nbsp;|&nbsp;&nbsp;</span>
+                        </li>
+                        <li><a href="#conclusion">Conclusion</a>
+                            <span class="separator">&nbsp;&nbsp;|&nbsp;&nbsp;</span>
+                        </li>
+                        <li><a href="#references">References</a></li>
+                    </ul>
+                </div>
+            </div>
+        </header>
+
+        <!-- Content container with large top spacing -->
+        <div class="container mt-lg">
+            <!-- Anchor ID -->
+            <section id="introduction">
+                <!-- Section title -->
+                <h2>I. Introduction</h2>
+                <p>
+                    As the urbanization of the human population continues, the importance of 
+                    intelligent transportation systems has grown significantly. The use of sophisticated 
+                    computational methods, such as deep learning and computer vision, can enhance 
+                    the development of efficient solutions to tackle challenges in the transportation 
+                    industry. In this paper, we demonstrates the construction of an efficient pipeline for 
+                    measuring the intersection turning volume, one of the well-known task in
+                    the transportation field. 
+                </p>
+                <p>
+                    Intersection turning volume refers to the number of vehicles that are turning 
+                    left or right at an intersection during a specific period of time. Such volume is useful
+                    for transportation planners to not only understand overall performance of an 
+                    intersection but also determine the design of turn lanes or signal timing plans for improving safety 
+                    and reducing congestion. A conventional approach to measure the turning traffic volumes relies on manual
+                    efforts to count the number of vehicles in situ or from videos. This approach may
+                    have some concerns in terms of being labor-intensive, prone to sampling bias
+                    , and unsuitable for those applications that need dynamic data collection
+                    like adaptive light control. Fig 1. allows readers to experience counting 
+                    the number of vehicles for each type of turns by counting manually. Readers may find
+                    this task is time-consuming and hard to scale up for intelligent transportation systems.
+                </p>
+                <div class="framed" style="margin-bottom: 20px">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            To tally the number of cars, click on the "Start" button and input your responses into the table located 
+                            on the right-hand side. Once finished, hit the "Submit" button to verify the accuracy of your answers. 
+                            Additionally, you can measure the time it takes to count the cars manually.
+                        </div>
+                        <div class="text-center">
+                            <p><span id="description"></span></p>
+                            <p><span id="intro-timer">0</span></p>
+                            <p></p>
+                        </div>
+                        <div class="introduction-container" style="position:relative">
+                            <div class="introduction-video">
+                                <!-- Right-up corner text -->
+                                <div style="justify-content: space-between; display: flex;">
+                                    <div>North</div>
+                                    <div>East</div>
+                                </div>
+                                <video class="video-frame" width="437" height="329" style="pointer-events:none;" muted>
+                                    <source src="data/introduction/Ko-PER_Intersection_Sequence1d_KAB_SK_1_undist.mp4" type="video/mp4">
+                                    Your browser does not support the video tag.
+                                </video>
+                                <div style="justify-content: space-between; display: flex;">
+                                    <div>West</div>
+                                    <div>South</div>
+                                </div>
+                            </div>
+                            <!-- Empty placeholder -->
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div class="count-table-frame" style="display:flex; flex-direction: column;">
+                                <table class="count-table" style="pointer-events:none; flex: 4; font-size: 0.8em; width:max(6vw, 300); height:(6vw, 300)">
+                                    <thead>
+                                        <tr>
+                                            <th></th>
+                                            <th>car</th>
+                                            <th>big car</th>
+                                            <th>motor bike</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody style="align-items: center;">
+                                        <tr class="count-ans">
+                                            <th>South to North</th>
+                                            <td><input type="number" value="0" data-ans="28"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                        </tr>
+                                        <tr class="count-ans">
+                                            <th>North to South</th>
+                                            <td><input type="number" value="0" data-ans="27"></td>
+                                            <td><input type="number" value="0" data-ans="3"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                        </tr>
+                                        <tr class="count-ans">
+                                            <th>South to East</th>
+                                            <td><input type="number" value="0" data-ans="3"></td>
+                                            <td><input type="number" value="0" data-ans="1"></td>
+                                            <td><input type="number" value="0" data-ans="1"></td>
+                                        </tr>
+                                        <tr class="count-ans">
+                                            <th>South to West</th>
+                                            <td><input type="number" value="0" data-ans="1"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                        </tr>
+                                        <tr class="count-ans">
+                                            <th>North to East</th>
+                                            <td><input type="number" value="0" data-ans="1"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                        </tr>
+                                        <tr class="count-ans">
+                                            <th>North to West</th>
+                                            <td><input type="number" value="0" data-ans="3"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                            <td><input type="number" value="0" data-ans="0"></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <div class="count-btn-container" style="flex: 1;">
+                                    <button class="count-btn" style="width:5em; font-weight: bold;">Start</button>
+                                </div>
+                            </div>
+                            
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 1:</b> Counting the turning volume manually. The video is from [<a href="#ref_0">1</a>].</div>
+                        <script src="js/introduction.js"></script>
+                    </div>
+                </div>
+                <p>
+                This paper discusses an efficient and automated approach for measuring turning 
+                volumes at intersections based on computer vision technique. Fig. 2 gives
+                the system overview of this approach. The main components are: 1) traffic monitoring cameras: 
+                obtaining videos of the intersection with clear view; 2) object 
+                detection algorithm: detecting the location of an object and identify which type of 
+                vehicle the detected object is; and identify objects in the video footage; 3) object tracking
+                algorithm: associating the objects detected by the object detection algorithm across multiple
+                frames to generate a track of each vehicle; 4) intersection turning volume
+                calculation: identify the lanes where the starting point and the end point of 
+                a track are located to compute the intersection turning volume. The rest of this paper
+                will describe the detail of each component.
+                </p>   
+                <figure class="text-center">
+                    <img src="img/system-overview.png" alt="System overview" height="600">
+                    <figcaption><strong>Figure 2:</strong> System overview
+                    </figcaption>
+                </figure>
+            </section>
+
+            <section id="yod">
+                <h2>II. Object Detection Algorithm</h2>
+                <p>
+                    Object detection is the first step of measuring intersection turning volume, which 
+                    identifies the location of vehicles in each frame of a video and classifies them into a type of 
+                    vehicles, e.g., small car, big car, and motorcycle. This paper takes YOLOv1, one of the 
+                    most classical object detection algorithm,  as an example as YOLO family are 
+                    open-sourced and production-ready object detection algorithms [<a href="#ref_1">2</a>][<a href="#ref_2">3</a>]. 
+                    
+                    As object detection is a supervised task, it is necessary to prepare training datasets for training
+                    a YOLO model. Fortunately, the pretrained model of YOLO is available so that we can only label 
+                    affordable amount of vehicle to obtain a YOLO model that fits the vehicle detection task in this paper. 
+                    To label vehicle data, several frames From videos are selected. 
+                    Each vehicle in a frame is mark by a rectangle box. This box can be 
+                    represented into the format of (<i>class</i>, <i>x_center</i>>, <i>y_center</i>>, 
+                    <i>width</i>,<i>height</i>) where <i>class</i> represent
+                    the type of vehicle, <i>x_center</i> and <i>y_center</i> represent the x-coordinate and y-coordinate
+                    of the center of the box, and <i>width</i> and <i>height</i> are the width and height of the box.
+                    It is worth mentioned that data labeling should comply a specific regulation to ensure the consistency
+                    of training data. Fig 3. allows readers to label vehicles on a frame by yellow rectangles. 
+                    Once the annotation is done, red rectangles, which are annotated by the authors, will be shown. The 
+                    variation in labels across different individuals highlights the need to establish labeling regulations 
+                    prior to labeling data.
+                </p>
+                <!-- Interactive frame -->
+                <div class="framed" style="margin-bottom: 20px">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            To annotate the car in the image, click on the "Start" button and click on the "Finish" button when you are finished with your annotation.
+                        </div>
+                        <div class="annotation-container">
+                            <div id="tip">
+                                <div class="text-center">
+                                    <button id="btn-start">Start</button>
+                                    <button id="btn-finish">Finish</button>
+                                    <button id="btn-reset">Reset</button>
+                                </div>
+                            </div>
+                            <div class="sub-container">
+                                <div id="overlay"></div>
+                                <div class="canvas-wrapper-simple">
+                                    <canvas id="annotation-canvas" width="656" height="494"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 3:</b>Annotation</div>
+                        <script src="js/annotation_simple.js"></script>
+                    </div>
+                </div>
+                <p> 
+                    With well-trained model, YOLO v1 uses a single convolutional neural network (CNN) to simultaneously 
+                    predict bounding boxes and class probabilities for detected objects as shown in Fig. 4. YOLO v1 divides 
+                    the input image into a grid of cells and uses trained CNN to predicts a fixed number of bounding boxes 
+                    and class probabilities for each cell. The predicted bounding boxes are parameterized relative to the cell 
+                    location, width, and height, and the predicted class probabilities are computed for each bounding box. 
+                    Finally, YOLO v1 performs post-processing. Non-maximum suppression is applied to remove overlapping 
+                    bounding boxes with lower confidence scores. The remaining bounding boxes are selected by a specific 
+                    threshold based on their confidence scores and class probabilities. The output is the final set of 
+                    detected objects with their bounding boxes and class labels. 
+                </p>
+                <figure class="text-center">
+                    <img src="img/yolo.jpg" alt="YOLO detection algorithm" width="700" height="500">
+                    <figcaption><strong>Figure 4:</strong> YOLO detection algorithm
+                    </figcaption>
+                </figure>
+                <p>
+                    Take a deep dive into the technical details. In YOLO v1, a convolutional neural network can learn filters that extract meaningful features (represented as heatmaps) from an image by completing the downstream task, which is predicting the location of the bounding box and the category of the object. These learned filters can then be used to extract meaningful features for unseen images. Fig. 5 visualizes a frame with and without a learned filter applied, where filters are selected from the CNN in YOLO v1 trained by our real dataset. It can be seen that various features of this frame can be emphasized, which could be useful for object localization and identification.
+                </p>
+                <div class="framed" style="margin-bottom: 20px">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            Choose the desired filter type and adjust the slider to preview the images with and without the filter applied.
+                        </div>
+                        <div class="yolo-extract-container">
+                            <div class="yolo-extract-image">
+                                <div class="img background-img"></div>
+                                <div class="img foreground-img"></div>
+                                <input type="range" min="1" max="100" value="50" id="slider" class="slider"
+                                    name="slider">
+                                <div class='slider-button'></div>
+                            </div>
+                            <div class="yolo-extract-filter">
+                                <select name="filter" id="filter"></select>
+                                <div class="filter-box">
+                                    <img class="filter" src="img/filter/filter1.jpg"></img>
+                                    <p class="filter-text">filter matrix</p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 5:</b> Extract feature from image by applying filters</div>
+                        <script src="js/yolo_extract.js"></script>
+                    </div>
+                </div>
+                <p>
+                    Given an image, YOLO v1 first divides an image into \(S \times S\) cells,
+                    and each cell predict \(B\) bounding box. The confidence score of the \(i\)-th bounding box is defined as 
+                    \(Pr(Obj_{i}) \times IOU_{pred}^{truth}\) where \(Pr(Obj_{i})\) is the probability that
+                    the object in the \(i\)-th bounding box and \(IOU_{pred}^{truth}\) is the intersection-over-union 
+                    between the predicted bounding box and the ground truth box. The confidence value 
+                    reflects how confident the model is that the box contains an object and also how accurate it thinks 
+                    the box is that it predicts. At last, the confidence scores are then thresholded to remove the boxes 
+                    with low confidence, and non-maximum suppression is applied to remove overlapping boxes and retain only the most 
+                    likely detection for each object. Fig. 6 demonstrates the impact with setting different threshold for 
+                    the confidence value. Readers could observe that a low threshold may generate many overlapping bounding boxes
+                    for the same vehicle. In contrast, a high threshold may miss opportunities to detect some vehicles. A proper 
+                    threshold could be usually obtained via several trials carefully.
+                </p>
+                <div class="framed" style="margin-bottom: 20px; width:1300px;">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            Adjust the slider to set the confidence threshold, and observe how the number of detected objects changes accordingly.
+                        </div>
+                        <div class="text-center">
+                        </div>
+                        <div class="yolo-filter-container">
+                            <canvas id="f" width="1280" height="360"></canvas>
+                            <div class="filter-control">
+                                <input type="range" name="filter-bar" id="filter-bar" min="0" max="1" step="0.01">
+                                <label for="filter-bar" class="threshold-text">Confidence: 0.5</label>
+                            </div>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 6:</b>Object detected with different confidence threshold settings</div>
+                        <script src="js/yolo_filter.js"></script>
+                    </div>
+                </div>
+            </section>
+
+            <section id="dta">
+                <h2>III. Object Tracking Algorithm</h2>
+                <p>
+                    Given the objects detected in each frame, this section describes an object tracking algorithm.
+                    Object tracking is to maintain the identify of objects as they move across the frames. In the other words,
+                    the objects, which are likely to be the same identity, across frames are associated. Fig. 7 shows an 
+                    interactive element where you can try to identify the target object in the \(t-1\)-th frame 
+                    from six objects detected in the \(t\)-th frame. Readers may find that the intuition of object tracking is
+                    to find the object in the frame which is similar and close to the target object in the previous frame. 
+                </p> 
+                <div class="framed" style="margin-bottom: 20px">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            To begin this interactive element, click the "Start" button. Your task is to identify the target 
+                            object from a group of six objects detected in the following frame on the right-hand side. 
+                            Once you have made your selection, click the "Done" button to reveal the correct answer.
+                        </div>
+                        <div class="ds-demo">
+                            <div class="ds-target" style="display:flex;">
+                                <p>Target</p>
+                                <img src="" alt="">
+                            </div>
+                            <div class="ds-compare" style="display: flex;">
+                                <div class="compare-items">
+                                    <input type="checkbox" name="compare">
+                                    <img src="">
+                                </div>
+                                <div class="compare-items">
+                                    <input type="checkbox" name="compare">
+                                    <img src="">
+                                </div>
+                                <div class="compare-items">
+                                    <input type="checkbox" name="compare">
+                                    <img src="">
+                                </div>
+                                <div class="compare-items">
+                                    <input type="checkbox" name="compare">
+                                    <img src="">
+                                </div>
+                                <div class="compare-items">
+                                    <input type="checkbox" name="compare">
+                                    <img src="">
+                                </div>
+                                <div class="compare-items">
+                                    <input type="checkbox" name="compare">
+                                    <img src="">
+                                </div>
+                            </div>
+                            <p> </p>
+                            <p> </p>
+                            <div style="display: block">
+                                <button class="demo-next">Next</button>
+                            </div>
+                        </div>
+                        <div class="ds-demo-score" style="display: none;">
+                            <p>accuracy: <span id="ds-demo-acc1">0</span>/10 (<span id="ds-demo-acc2">0</span>%)</p>
+                            <!-- <p>This is what DeepSORT doing, hope you to know it more!</p> -->
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 7:</b> Associating objects in the consecutive frames </div>
+                        <script src="js/ds_demo.js"></script>
+                    </div>
+                </div>
+                <p>
+                    This section takes DeepSORT (Deep Learning-based SORT) as an example of object tracking algorithms [<a href="#ref_3">4</a>].
+                    DeepSORT adds a deep learning-based component to SORT (Simple Online and Realtime Tracking) Algorithm [<a href="#ref_4">5</a>].
+                    With extracting deep features of tracked objects, DeepSORT could associate detections with existing 
+                    tracks efficiently so that occlusions and track re-identification, which are challenging for traditional 
+                    tracking algorithms, could be overcome. Fig. 8 shows the high-level function diagram of DeepSORT. DeepSORT
+                    algorithm consists of the following steps:
+                    <ol>
+                        <li> <b>Object detection:</b> In each subsequent frame of the video, an object detection algorithm, e.g., YOLO, is performed to
+                            generate a set of object detections. 
+                        </li>
+                        <li> <b>Feature extraction:</b> For each detection, a set of high-level 
+                            features are extracted by a deep neural network, which are used to represent the <i>appearance</i> of 
+                            the object detected. 
+                        </li>
+                        <li> <b>Object association:</b> Hungarian algorithm[<a href="#ref_5">6</a>] is then used to associate each detection with an existing track or create 
+                            a new track if necessary. This is done by computing the distance that integrates motion and 
+                            appearance information through combination of two appropriate metrics, say Mahalanobis distance and 
+                            consine distance.
+                        </li>
+                        <li>
+                            <b>Track management:</b> The algorithm updates the state of each track using the associated 
+                            detection. This includes updating the <i>Kalman filter</i>[<a href="#ref_6">7</a>] estimate of the position and velocity 
+                            of the tracked object, as well as updating the track's age and visibility.
+                        </li>
+                        <li> <b>Track deletion:</b> Finally, the algorithm deletes tracks that have not been updated for a 
+                            certain number of frames or that have been invisible for a certain number of frames.
+                        </li>
+                    </ol>
+                </p>
+                <figure class="text-center">
+                    <img src="img/deepsort.png" alt="DeepSORT" width="700" height="500">
+                    <figcaption><strong>Figure 8:</strong> DeepSORT 
+                    </figcaption>
+                </figure>
+                <p> Take a deeper look into the object association step in DeepSORT. Assigning the detections to  
+                    the existing tracks can be viewed as the assignment problem. The Hungarian algorithm is 
+                    a well-known optimization algorithm that can efficiently find the optimal assignment given a cost 
+                    matrix. In our case, Hungarian algorithm finds the most possible track that a newly coming detection
+                    should be associated with. The cost matrix here is a matrix \(C_{m \times n}\) where \(n\) is the number of detections 
+                    and \(m\) is the number of tracks. The value of \((i,j)\)-th entry in \(C\) is defined as 
+                    \(c_{i,j}=\lambda d^{(1)}(i,j)+(1-\lambda)d^{(2)}(i,j)\) where \(d^{(1)}(i,j)\) is the 
+                    Mahalanobis distance between the projection of the \(i\)-th track in appearance space and 
+                    \(j\)-th newly arrived bounding box, and \(d^{(2)}(i,j)\) is the smallest cosine distance between 
+                    the \(i\)−th track and \(j\)−th detection in appearance space. This cost matrix takes advantages of
+                    the Mahalanobis distance, which provides short-term predictions as it provides insights about 
+                    likely object locations based on motion cues, and the consine distance, which is useful for recovering 
+                    identities after long-term occlusions when motion cues are less discriminative as it considers 
+                    appearance information.
+
+                    Given the cost matrix, Hungarian algorithm proceeds three steps: row reduction, column reduction, 
+                    and finding the minimum line that covers all zeros. Row
+                    reduction involves reducing the value of each row to the minimum value. Column reduction involves
+                    reducing the value of each column to the minimum value. After row or column reduction, we need to
+                    find the minimum line that covers all zeros. If the line number is equal to the number of objects in
+                    the current frame, then we can pair the objects. If the line number is less than the number of
+                    objects in the current frame, we need to perform row or column reduction again. Fig. 9 shows an interactive
+                    example for readers to understand the Hungarian algorithm by performing 
+                    the row reduction, column reduction, and finding the minimum line that covers all zeros.
+                </p>
+                <div class="framed" style="margin-bottom: 20px">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            By clicking on the "row reduction" and "column reduction" buttons, you can see the red lines that cover all the zeros.
+                        </div>
+                        <div class="hungarian-container">
+                            <div id="hungarian-result" style="display: none;">
+                                <p>A' → F</p>
+                                <p>B' → A</p>
+                                <p>C' → E</p>
+                                <p>D' → D</p>
+                                <p>E' → B</p>
+                                <p>F' → C</p>
+                            </div>
+                            <div id="table-container">
+                                <table>
+                                    <tr>
+                                        <td></td>
+                                        <td></td>
+                                        <td colspan="6">tracks</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td></td>
+                                        <td></td>
+                                        <td>A</td>
+                                        <td>B</td>
+                                        <td>C</td>
+                                        <td>D</td>
+                                        <td>E</td>
+                                        <td>F</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td rowspan="6" style="writing-mode: vertical-lr">detections</td>
+                                        <td>A'</td>
+                                        <td>3</td>
+                                        <td>9</td>
+                                        <td>7</td>
+                                        <td>5</td>
+                                        <td>2</td>
+                                        <td>1</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td>B'</td>
+                                        <td>3</td>
+                                        <td>4</td>
+                                        <td>6</td>
+                                        <td>4</td>
+                                        <td>2</td>
+                                        <td>6</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td>C'</td>
+                                        <td>5</td>
+                                        <td>2</td>
+                                        <td>5</td>
+                                        <td>1</td>
+                                        <td>1</td>
+                                        <td>4</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td>D'</td>
+                                        <td>8</td>
+                                        <td>3</td>
+                                        <td>5</td>
+                                        <td>3</td>
+                                        <td>5</td>
+                                        <td>8</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td>E'</td>
+                                        <td>3</td>
+                                        <td>1</td>
+                                        <td>9</td>
+                                        <td>7</td>
+                                        <td>3</td>
+                                        <td>7</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td>F'</td>
+                                        <td>6</td>
+                                        <td>7</td>
+                                        <td>1</td>
+                                        <td>9</td>
+                                        <td>7</td>
+                                        <td>7</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                </table>
+                                <svg id="table-draw"></svg>
+                            </div>
+                            <button id="next-btn" style="display: none;">Next</button>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 9:</b>Hungarian algorithm</div>
+                        <script src="js/hungarian.js"></script>
+                    </div>
+                </div>
+                <p> The final output of DeepSORT is a list of tracks where each track associates with a unique
+                    ID. Fig. 10 shows the results of DeepSORT of videos by a camera in different times of the day 
+                    and weather conditions. It can be seen that there is an ID associated with a bounding box which 
+                    shows the object is tracked among frames. On the other hand, DeepSORT may not always work well all the time.
+                    In some situations, objects may not be detected or tracked accurately due to various factors 
+                    such as occlusion, changes in lighting conditions, or the visible size of an object is too small to detect.
+                </p>
+                <div class="framed" style="margin-bottom: 20px">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            To view the results of DeepSORT, select a time from the dropdown menu and click on the "Show" button.
+                        </div>
+                        <div class="yolo-deepsort-container" style="margin-left: 9%">
+                            <div class="video-container" style="position: relative; margin-right: 20px">
+                                <video id="yolo-deepsort" width="640" height="360" muted style="position: relative; z-index: 0;">
+                                    <source src="" type="video/mp4">
+                                </video>
+                            </div>
+                            <div>
+                                <div class="yd-select" style="margin-bottom: 50%;">
+                                    <select>
+                                        <option selected disabled>Choose Time</option>
+                                        <option value="AM0930">AM 09:30</option>
+                                        <option value="rain">Rain</option>
+                                    </select>
+                                </div>
+                                <button id="yd-btn">Show</button>
+                            </div>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 10:</b> The result of DeepSORT</div>
+                        <script src="js/yolo_deepsort.js"></script>
+                    </div>
+                </div>
+            </section>
+
+            <section id="fttrwa">
+                <h2>IV. Intersection Turning Volume Calculation</h2>
+                <p>
+                    Computing intersection turning volume is to count the number of 
+                    cars making any types of turns from each lane. Given the tracks of vehicles, an effective way to 
+                    classify the tracks is the hot-region-based approach where two types of hot regions, say red region and 
+                    green region, are set on each lane to detect if a vehicle enters into and leaves from the intersection. 
+                    For example, when a track passes through a red region in East and pass a green region in South, we can say
+                    that this vehicle turns right from East. It is worth mentioning that the positions and areas 
+                    of the hot regions should be carefully determined. In some case, the points of a track may be sparse when 
+                    the speed of a vehicle is fast but the FPS of the camera is low. The sparseness of a track would not guarantee
+                    that this track can pass through a red region or a green region, which could lead to the wrong results. 
+                    Fig. 11 allows readers to set the red region and green region of each lane at the
+                    intersection. Readers would find that the tracks in this example are sparse so that 
+                    the change of the positions or sizes of hot regions may cause the wrong turning volumes.  
+                </p>
+                <div class="framed" style="margin-bottom: 20px; width:900px;">
+                    <!-- Additional class for responsiveness -->
+                    <div class="inside">
+                        <!-- Frame top blue text -->
+                        <div class="eyebrow">
+                            Make changes to the position and size of the red and green regions and observe the effect on the turning volumes.
+                        </div>
+                        <div class="tc-container">
+                            <canvas id="tc-canvas" width="650"></canvas>
+                            <table class="tc-table">
+                                <thead>
+                                    <tr>
+                                        <th></th>
+                                        <th>Number of cars</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="tc-count">
+                                        <th>South to North</th>
+                                        <td>0</td>
+                                    </tr>
+                                    <tr class="tc-count">
+                                        <th>South to East</th>
+                                        <td>0</td>
+                                    </tr>
+                                    <tr class="tc-count">
+                                        <th>South to West</th>
+                                        <td>0</td>
+                                    </tr>
+                                    <tr class="tc-count">
+                                        <th>West to East</th>
+                                        <td>0</td>
+                                    </tr>
+                                    <tr class="tc-count">
+                                        <th>East to left</th>
+                                        <td>0</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <!-- Frame caption -->
+                        <div class="caption"><b>Figure 11:</b>Hot-region-based approach for intersection turning volume computation</div>
+                        <script src="js/track.js"></script>
+                    </div>
+                </div>
+            </section>
+
+            <section id="conclusion">
+                <h2>Conclusion</h2> 
+                <p>
+                    This paper demonstrates the construction of an efficient pipeline for measuring the intersection turning volume, 
+                    a crucial task in the transportation field. Based on computer vision techniques, this pipeline involves four main 
+                    components: 1) traffic monitoring cameras to obtain videos of the intersection with a clear view; 
+                    2) an object detection algorithm to detect the location of an object and identify which type of vehicle 
+                    the detected object is; 3) an object tracking algorithm to associate 
+                    the objects detected by the object detection algorithm across multiple frames to generate a track of each vehicle; 
+                    and 4) an intersection turning volume calculation to identify the lanes where the starting point and the end point of 
+                    a track are located to compute the intersection turning volume. The paper also presents comprehensive overview with
+                    interactive elements for the core techniques of each component, including YOLO v1, DeepSORT and a hot-region-based 
+                    approach for calculating intersection turning volume. Readers could understand the benefits of the computer-vision-based pipeline which could overcome the limitations of 
+                    traditional manual counting methods and provide real-time traffic analysis.
+                </p>
+            </section>
+
+            <section class="references">
+                <h2>References</h2>
+                <ol>
+                    <li id="ref_0">
+                        The Ko-PER Intersection Laserscanner And Video Dataset.
+                        <br>
+                        <span>
+                            Strigel, E., Meissner, D., Seeliger, F., Wilking, B., and Dietmaye, K., 2014. International IEEE Conference on Intelligent Transportation Systems (ITSC), pp. 900--1901.
+                            DOI: <a href="https://doi.org/10.1109/ITSC.2014.6957976" target="_blank">
+                            10.1109/ITSC.2014.6957976</a>
+                        </span>
+                    </li>
+                    <li id="ref_1">
+                        You Only Look Once: Unified, Real-Time Object Detection.
+                        <br>
+                        <span>
+                            Redmon, J., Divvala, S., Girshick, R., and Farhadi A., 2016. IEEE Conference on Computer Vision and Pattern Recognition (CVPR), pp. 779--788.
+                            DOI: <a href="https://doi.org/10.1109/CVPR.2016.91" target="_blank">
+                            10.1109/CVPR.2016.91</a>
+                        </span>
+                    </li>
+                    <li id="ref_2">
+                        Deep Cosine Metric Learning for Person Re-identification.    
+                        <br>
+                        <span>
+                            Wojke, N. and Bewley, A, 2018. IEEE Winter Conference on Applications of Computer Vision (WACV), pp. 748--756.  
+                        DOI: <a href="https://doi.org/10.1109/WACV.2018.00087 target="_blank">
+                            10.1109/WACV.2018.00087</a>
+                        </span>
+                    </li>
+                    <li id="ref_3">
+                        Simple Online and Realtime Tracking with a Deep Association Metric.
+                        <br>
+                        <span>
+                            Wojke, N. and Bewley, A. and Paulus, D., 2017. IEEE International Conference on Image Processing (ICIP), pp. 3654--3649.
+                            DOI: <a href="https://doi.org/10.1109/ICIP.2017.8296962" target="_blank">
+                            10.1109/ICIP.2017.8296962</a>
+                        </span>
+                    </li>
+                    <li id="ref_4">
+                        Simple Online And Realtime Tracking
+                        <br>
+                        <span>
+                            Bewley, A., Ge, Z., Ott, L., Ramos, F., and Upcroft, B., 2016. IEEE International Conference on Image Processing (ICIP),
+                            pp. 3464-3468.
+                            . DOI:  
+                        <a href="https://doi.org/10.1109/ICIP.2016.7533003." target="_blank">
+                            10.1109/ICIP.2016.7533003.</a>
+                        </span>
+                    </li>
+                    <li id="ref_5">
+                        The Hungarian Method for the Assignment Problem.
+                        <br>
+                        <span>
+                        Kuhn, H., 1955. Naval Research Logistics Quarterly, Vol 2(1-2), pp. 83--97. DOI: 
+                        <a href="https://doi.org/10.1002/nav.3800020109" target="_blank">10.1002/nav.3800020109</a>
+                        </span>
+                    </li>
+                    <li id="ref_6">
+                        An Elementary Introduction to Kalman Filtering. 
+                        <br>
+                        <span>
+                            Pei, Y., Biswas, S., Fussell, D. S., and Pingali, K., 2019. Communications of ACM, 
+                            Vol 62(11), pp. 122--133. DOI: <a href="https://doi.org/10.1145/3363294" target="_blank">https://doi.org/10.1145/3363294</a>
+                        </span>
+                    </li>
+                </ol>
+            </section>
+        </div>
+    </article>
+</body>
+</html>

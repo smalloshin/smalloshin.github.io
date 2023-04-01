@@ -1,0 +1,70 @@
+.hungarian-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+}
+
+#hungarian-result {
+    width: 100px;
+    height: 200px;
+    position: absolute;
+    margin-left: 750px;
+    border: 1px solid #000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+#hungarian-result p {
+    font-size: 1rem;
+    margin: 5px 0;
+    text-align: center;
+}
+
+.hungarian-container td {
+    border: 1px solid black;
+    width: 3em;
+    height: 3em;
+    text-align: center;
+}
+
+.hungarian-container tr:first-child td, .hungarian-container tr:nth-child(2) td, .hungarian-container tr:nth-child(3) td:nth-child(2) {
+    border: 0px;
+}
+
+.hungarian-container tr td:first-child,  .hungarian-container tr td:last-child {
+    border: 0px;
+}
+
+.hungarian-container td:last-child {
+    width: 5em;
+}
+
+.hungarian-container tr:last-child td {
+    height: 5em;
+    border: 0px;
+}
+
+/* .hungarian-container tr:first-child td
+.hungarian-container tr:last-child td
+.hungarian-container td:first-child
+.hungarian-container td:last-child {
+    border: none;
+} */
+
+
+.hungarian-container #table-container {
+    position: relative;
+}
+
+.hungarian-container #table-draw {
+    position: absolute;
+    z-index: -1;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 100%;
+}
+
