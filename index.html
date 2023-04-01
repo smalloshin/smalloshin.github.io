@@ -283,7 +283,7 @@
                     
                     As object detection is a supervised task, it is necessary to prepare training datasets for training
                     a YOLO model. Fortunately, the pretrained model of YOLO is available so that we can only label 
-                    affortable amout of vehicle to obtain a YOLO model that fits the vehicle detection task in this paper. 
+                    affordable amount of vehicle to obtain a YOLO model that fits the vehicle detection task in this paper. 
                     To label vehicle data, first of all, several frames From videos are selected. 
                     Each vehicle in a frame is mark by a rectangle box. This box can be 
                     represented into the format of (<i>class</i>, <i>x_center</i>>, <i>y_center</i>>, 
@@ -345,11 +345,7 @@
                 </figure>
                 
                 <p>
-                Take a deep dive into the technical detail. In YOLO v1, convolutional neural network could learn the filters,
-                which can extract meaningful features (represented as heatmaps) from an image, by finishing the downstream task, i.e., prediction the 
-                location of the bounding box and the category of an object in this case. These learnt filters can be then used
-                to extract mearningful features for unseen images. Fig. 5 visualizes a frame with and without a learnt filter applied where filters are selected from the CNN in YOLO v1 trained by our real dataset. It can be seen that various features of this frame
-                could be emphasized, which could be useful for object localization and identification.
+                    Take a deep dive into the technical details. In YOLO v1, a convolutional neural network can learn filters that extract meaningful features (represented as heatmaps) from an image by completing the downstream task, which is predicting the location of the bounding box and the category of the object. These learned filters can then be used to extract meaningful features for unseen images. Fig. 5 visualizes a frame with and without a learned filter applied, where filters are selected from the CNN in YOLO v1 trained by our real dataset. It can be seen that various features of this frame can be emphasized, which could be useful for object localization and identification.
                 </p>
 
                 <div class="framed" style="margin-bottom: 20px">
@@ -428,7 +424,7 @@
                 <p>
                     Given the objects detected in each frame, this section describes an object tracking algorithm.
                     Object tracking is to maintain the identify of objects as they move across the frames. In the other words,
-                    the obejects, which are likely to be the same identity, across frames are associated. Fig. 7 shows an 
+                    the objects, which are likely to be the same identity, across frames are associated. Fig. 7 shows an 
                     interactive element where you can try to identify the target object in the \(t-1\)-th frame 
                     from six objects detected in the \(t\)-th frame. Readers may find that the intuition of object tracking is
                     to find the object in the frame which is similar and close to the target object in the previous frame. 
@@ -507,7 +503,7 @@
                             the object detected. 
                         </li>
                         <li> <b>Object association:</b> Hungarian algorithm[<a href="#ref_5">6</a>] is then used to associate each detection with an existing track or create 
-                            a new track if necessary. This is done by computing the distnace that integrates motion and 
+                            a new track if necessary. This is done by computing the distance that integrates motion and 
                             appearance information through combination of two appropriate metrics, say Mahalanobis distance and 
                             consine distance.
                         </li>
@@ -721,15 +717,15 @@
             <section id="fttrwa">
                 <h2>IV. Intersection Turning Volume Calculation</h2>
                 <p>
-                    Computing intersection turning volmue is to count the number of 
+                    Computing intersection turning volume is to count the number of 
                     cars making any types of turns from each lane. Given the tracks of vehicles, an effective way to 
                     classify the tracks is the hot-region-based approach where two types of hot regions, say red region and 
                     green region, are set on each lane to detect if a vehicle enters into and leaves from the intersection. 
-                    For example, when a track pass through a red region in East and pass a green region in South, we can say
+                    For example, when a track passes through a red region in East and pass a green region in South, we can say
                     that this vehicle turns right from East. It is worth mentioning that the positions and areas 
                     of the hot regions should be carefully determined. In some case, the points of a track may be sparse when 
-                    the speed of a vehicle is fast but the FPS of the camera is low. The sparseness of a track would not guarentee
-                    if this track can pass through a red region or a green region, which could lead to the wrong results. 
+                    the speed of a vehicle is fast but the FPS of the camera is low. The sparseness of a track would not guarantee
+                    that this track can pass through a red region or a green region, which could lead to the wrong results. 
                     Fig. 11 allows readers to set the red region and green region of each lane at the
                     intersection. Readers would find that the tracks in this example are sparse so that 
                     the change of the positions or sizes of hot regions may cause the wrong turning volumes.  
