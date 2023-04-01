@@ -145,11 +145,11 @@
                     left or right at an intersection during a specific period of time. Such volume is useful
                     for transportation planners to not only understand overall performance of an 
                     intersection but also determine the design of turn lanes or signal timing plans for improving safety 
-                    and reducing congestion. A conventional approach to measure the turning traffic volumes relys on manual
+                    and reducing congestion. A conventional approach to measure the turning traffic volumes relies on manual
                     efforts to count the number of vehicles in situ or from videos. This approach may
                     have some concerns in terms of being labor-intensive, prone to sampling bias
                     , and unsuitable for those applications that need dynamic data collection
-                    like adapative light control. Fig 1. allows readers to experience counting 
+                    like adaptive light control. Fig 1. allows readers to experience counting 
                     the number of vehicles for each type of turns by counting manually. Readers may find
                     this task is time-consuming and hard to scale up for intelligent transportation systems.
                 </p>
@@ -244,7 +244,7 @@
                                 
                             </div>
                             <!-- Frame caption -->
-                            <div class="caption"><b>Figure 1:</b> Counting the turning volume manually</div>
+                            <div class="caption"><b>Figure 1:</b> Counting the turning volume manually. The background image is from [<a href="#ref_0">1</a>].</div>
                             <script src="js/introduction.js"></script>
                         </div>
                     </div>
@@ -279,7 +279,7 @@
                     identifies the location of vehicles in each frame of a video and classifies them into a type of 
                     vehicles, e.g., small car, big car, and motorcycle. This paper takes YOLOv1, one of the 
                     most classical object detection algorithm,  as an example as YOLO family are 
-                    open-sourced and production-ready object detection algorithms [<a href="#ref_1">1</a>][<a href="#ref_2">2</a>]. 
+                    open-sourced and production-ready object detection algorithms [<a href="#ref_1">2</a>][<a href="#ref_2">3</a>]. 
                     
                     As object detection is a supervised task, it is necessary to prepare training datasets for training
                     a YOLO model. Fortunately, the pretrained model of YOLO is available so that we can only label 
@@ -491,8 +491,8 @@
 
 
                 <p>
-                    This section takes DeepSORT (Deep Learning-based SORT) as an example of object tracking algorithms [<a href="#ref_3">3</a>].
-                    DeepSORT adds a deep learning-based component to SORT (Simple Online and Realtime Tracking) Algorithm [<a href="#ref_4">4</a>].
+                    This section takes DeepSORT (Deep Learning-based SORT) as an example of object tracking algorithms [<a href="#ref_3">4</a>].
+                    DeepSORT adds a deep learning-based component to SORT (Simple Online and Realtime Tracking) Algorithm [<a href="#ref_4">5</a>].
                     With extracting deep features of tracked objects, DeepSORT could associate detections with existing 
                     tracks efficiently so that occlusions and track re-identification, which are challenging for traditional 
                     tracking algorithms, could be overcome. Fig. 8 shows the high-level function diagram of DeepSORT. DeepSORT
@@ -505,14 +505,14 @@
                             features are extracted by a deep neural network, which are used to represent the <i>appearance</i> of 
                             the object detected. 
                         </li>
-                        <li> <b>Object association:</b> Hungarian algorithm[<a href="#ref_5">5</a>] is then used to associate each detection with an existing track or create 
+                        <li> <b>Object association:</b> Hungarian algorithm[<a href="#ref_5">6</a>] is then used to associate each detection with an existing track or create 
                             a new track if necessary. This is done by computing the distnace that integrates motion and 
                             appearance information through combination of two appropriate metrics, say Mahalanobis distance and 
                             consine distance.
                         </li>
                         <li>
                             <b>Track management:</b> The algorithm updates the state of each track using the associated 
-                            detection. This includes updating the <i>Kalman filter</i>[<a href="#ref_6">6</a>] estimate of the position and velocity 
+                            detection. This includes updating the <i>Kalman filter</i>[<a href="#ref_6">7</a>] estimate of the position and velocity 
                             of the tracked object, as well as updating the track's age and visibility.
                         </li>
                         <li> <b>Track deletion:</b> Finally, the algorithm deletes tracks that have not been updated for a 
@@ -802,6 +802,15 @@
             <section class="references">
                 <h2>References</h2>
                 <ol>
+                    <li id="ref_0">
+                        The Ko-PER Intersection Laserscanner And Video Dataset.
+                    <br>
+                    <span>
+                        Strigel, E., Meissner, D., Seeliger, F., Wilking, B., and Dietmaye, K., 2014. International IEEE Conference on Intelligent Transportation Systems (ITSC), pp. 900--1901.
+                      DOI: <a href="https://doi.org/10.1109/ITSC.2014.6957976" target="_blank">
+                        10.1109/ITSC.2014.6957976</a>
+                    </span>
+                  </li>
                   <li id="ref_1">
                     You Only Look Once: Unified, Real-Time Object Detection.
                     <br>
@@ -850,7 +859,7 @@
                   </span>
                   </li>
                   <li id="ref_6">
-                  Equilibria problems on games: Complexity versus succinctness. 
+                    An Elementary Introduction to Kalman Filtering. 
                   <br>
                   <span>
                     Pei, Y., Biswas, S., Fussell, D. S., and Pingali, K., 2019. Communications of ACM, 
