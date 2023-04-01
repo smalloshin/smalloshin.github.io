@@ -271,7 +271,7 @@
                     As object detection is a supervised task, it is necessary to prepare training datasets for training
                     a YOLO model. Fortunately, the pretrained model of YOLO is available so that we can only label 
                     affordable amount of vehicle to obtain a YOLO model that fits the vehicle detection task in this paper. 
-                    To label vehicle data, first of all, several frames From videos are selected. 
+                    To label vehicle data, several frames From videos are selected. 
                     Each vehicle in a frame is mark by a rectangle box. This box can be 
                     represented into the format of (<i>class</i>, <i>x_center</i>>, <i>y_center</i>>, 
                     <i>width</i>,<i>height</i>) where <i>class</i> represent
@@ -360,8 +360,7 @@
                 </div>
                 <p>
                     Given an image, YOLO v1 first divides an image into \(S \times S\) cells,
-                    and each cell predict \(B\) bounding box. The confidence score of each detected object 
-                    is the predicted bounding box. The confidence value of the \(i\)-th bounding box is defined as 
+                    and each cell predict \(B\) bounding box. The confidence score of the \(i\)-th bounding box is defined as 
                     \(Pr(Obj_{i}) \times IOU_{pred}^{truth}\) where \(Pr(Obj_{i})\) is the probability that
                     the object in the \(i\)-th bounding box and \(IOU_{pred}^{truth}\) is the intersection-over-union 
                     between the predicted bounding box and the ground truth box. The confidence value 
