@@ -172,7 +172,7 @@
                                     <!-- Right-up corner text -->
                                     <div style="justify-content: space-between; display: flex;">
                                         <div>North</div>
-                                        <div>Easet</div>
+                                        <div>East</div>
                                     </div>
                                     <video class="video-frame" width="437" height="329" style="pointer-events:none;" muted>
                                         <source src="data/introduction/Ko-PER_Intersection_Sequence1d_KAB_SK_1_undist.mp4" type="video/mp4">
@@ -405,12 +405,11 @@
                             Adjust the slider to set the confidence threshold, and observe how the number of detected objects changes accordingly.
                         </div>
                         <div class="text-center">
-               
                         </div>
                         <div class="yolo-filter-container">
                             <canvas id="f" width="1280" height="360"></canvas>
                             <div class="filter-control">
-                                <input type="range" name="fliter-bar" id="filter-bar" min="0" max="1" step="0.01">
+                                <input type="range" name="filter-bar" id="filter-bar" min="0" max="1" step="0.01">
                                 <label for="filter-bar" class="threshold-text">Confidence: 0.5</label>
                             </div>
                         </div>
@@ -444,11 +443,11 @@
                             Once you have made your selection, click the "Done" button to reveal the correct answer.
                         </div>
                         <div class="ds-demo">
-                            <div class="ds-target" style="visibility: hidden; display:flex;">
+                            <div class="ds-target" style="display:flex;">
                                 <p>Target</p>
                                 <img src="" alt="">
                             </div>
-                            <div class="ds-compare" style="visibility: hidden; display: flex; ">
+                            <div class="ds-compare" style="display: flex;">
                                 <div class="compare-items">
                                     <input type="checkbox" name="compare">
                                     <img src="">
@@ -477,11 +476,11 @@
                             <p> </p>
                             <p> </p>
                             <div style="display: block">
-                                <button class="demo-next">Start</button>
+                                <button class="demo-next">Next</button>
                             </div>
                         </div>
                         <div class="ds-demo-score" style="display: none;">
-                            accuracy: <span id="ds-demo-acc1">0</span>/10 (<span id="ds-demo-acc2">0</span>%)</p>
+                            <p>accuracy: <span id="ds-demo-acc1">0</span>/10 (<span id="ds-demo-acc2">0</span>%)</p>
                             <!-- <p>This is what DeepSORT doing, hope you to know it more!</p> -->
                         </div>
                         <!-- Frame caption -->

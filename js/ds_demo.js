@@ -136,7 +136,7 @@
 
     const targetImage = $(".ds-target img");
     const compareImages = $(".compare-items img");
-    const comapreCheckbox = $(".compare-items input");
+    const compareCheckbox = $(".compare-items input");
     const nextButton = $(".demo-next");
     const scoreContainer = $(".ds-demo-score");
     const acc1 = $("#ds-demo-acc1");
@@ -154,7 +154,7 @@
         let isCorrect = false;
         let isAnswered = false;
         for (let i = 0; i < 6; i++) {
-            if (comapreCheckbox[i].checked) {
+            if (compareCheckbox[i].checked) {
                 isAnswered = true;
                 break;
             }
@@ -162,27 +162,27 @@
         if (!isAnswered) return;
         for (let i = 0; i < 6; i++) {
             if (i == Questions[questionIndex].answer) {
-                isCorrect = comapreCheckbox[i].checked;
-                comapreCheckbox[i].checked = true;
-                $(comapreCheckbox[i]).addClass("correct");
-            } else if (comapreCheckbox[i].checked) {
-                $(comapreCheckbox[i]).addClass("wrong");
+                isCorrect = compareCheckbox[i].checked;
+                compareCheckbox[i].checked = true;
+                $(compareCheckbox[i]).addClass("correct");
+            } else if (compareCheckbox[i].checked) {
+                $(compareCheckbox[i]).addClass("wrong");
             }
         }
 
         if (isCorrect) score++;
         answerShowed = true;
-        if (questionIndex) nextButton.text("NEXT");
-        nextButton.text("NEXT");
+        if (questionIndex) nextButton.text("Next");
+        nextButton.text("Next");
         questionIndex++;
 
         return isCorrect;
     }
 
     function loadQuestion() {
-        comapreCheckbox.removeClass("correct");
-        comapreCheckbox.removeClass("wrong");
-        comapreCheckbox.prop("checked", false);
+        compareCheckbox.removeClass("correct");
+        compareCheckbox.removeClass("wrong");
+        compareCheckbox.prop("checked", false);
 
         targetImage.attr("src", Questions[questionIndex].target);
         for (let i = 0; i < 6; i++) {
@@ -191,14 +191,14 @@
 
         answerShowed = false;
 
-        if (questionIndex) nextButton.text("DONE");
+        if (questionIndex) nextButton.text("Done");
         else startTime = new Date().getTime();
-        nextButton.text("DONE");
+        nextButton.text("Done");
     }
 
-    comapreCheckbox.click((event) => {
+    compareCheckbox.click((event) => {
         if (answerShowed) return false;
-        comapreCheckbox.each((_, checkbox) => {
+        compareCheckbox.each((_, checkbox) => {
             if (checkbox != event.target) {
                 checkbox.checked = false;
             }
@@ -206,33 +206,27 @@
     });
 
     nextButton.click(() => {
-        if (nextButton.text() == "START") {
+        if (answerShowed) {
             loadQuestion();
-            $(".ds-target").css("visibility", "visible");
-            $(".ds-compare").css("visibility", "visible");
-        } else{
-            if (answerShowed) {
-                loadQuestion();
-            } else {
-                showAnswer();
-                if (questionIndex >= Questions.length) {
-                    endTime = new Date().getTime();
-                    acc1.text(score);
-                    acc2.text(score * 10);
-                    if (score < 10) isBetter.text(" (Better)");
-    
-                    let timeUsed = ((endTime - startTime) / 1000).toFixed(1);
-                    time1.text(timeUsed);
-                    time2.text(((timeUsed / 0.7) * 100) | 0);
-    
-                    scoreContainer.show();
-                    nextButton.hide();
-                }
+        } else {
+            showAnswer();
+            if (questionIndex >= Questions.length) {
+                endTime = new Date().getTime();
+                acc1.text(score);
+                acc2.text(score * 10);
+                if (score < 10) isBetter.text(" (Better)");
+
+                let timeUsed = ((endTime - startTime) / 1000).toFixed(1);
+                time1.text(timeUsed);
+                time2.text(((timeUsed / 0.7) * 100) | 0);
+
+                scoreContainer.show();
+                nextButton.hide();
             }
         }
         
     });
 
-    // loadQuestion();
+    loadQuestion();
     // showAnswer();
 })();
