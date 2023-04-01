@@ -70,7 +70,7 @@
                             <h2>Authors</h2>
                             <ul>
                                 <li>Kuan-Chuan Chou | National Chung Hsing University, Taiwan</li>
-                                <li>WeiCheng Chen | National Chung Hsing University, Taiwan</li>
+                                <li>Wei-Cheng Chen | National Chung Hsing University, Taiwan</li>
                                 <li>Min-Hsien Hung | National Chung Hsing University, Taiwan</li>
                                 <li>Li-Chun Chang | National Chung Hsing University, Taiwan</li>
                                 <li>Chih-Chieh Hung | National Chung Hsing University, Taiwan</li>
@@ -111,7 +111,7 @@
                             <span class="separator">&nbsp;&nbsp;|&nbsp;&nbsp;</span>
                         </li>
                         <li>
-                            <a href="#fttrwa">From theory to real-world Application</a>
+                            <a href="#fttrwa">Intersection Turning Volume Calculation</a>
                             <span class="separator">&nbsp;&nbsp;|&nbsp;&nbsp;</span>
                         </li>
                         <li><a href="#conclusion">Conclusion</a>
@@ -254,14 +254,14 @@
                     detection algorithm: detecting the location of an object and identify which type of 
                     vehicle the detected object is; and identify objects in the video footage; 3) object tracking
                     algorithm: associating the objects detected by the object detection algoithm across multiple
-                    frames to generate a movement trajectory of each vehicle; 4) intersection turning volume
-                    computation: identify the lanes where the starting point and the end point of 
-                    a trajectory are located to compute the intersection turning volume. The rest of this paper
+                    frames to generate a track of each vehicle; 4) intersection turning volume
+                    caculation: identify the lanes where the starting point and the end point of 
+                    a track are located to compute the intersection turning volume. The rest of this paper
                     will describe the detail of each component.
                     </p>   
 
                 <figure class="text-center">
-                    <img src="img/ObjectTrackingWorkflow.svg" alt="System overview" width="511" height="441">
+                    <img src="img/system-overview.png" alt="System overview" height="600">
                     <figcaption><strong>Figure 2:</strong> System overview
                     </figcaption>
                 </figure>
@@ -424,51 +424,23 @@
 
 
             <section id="dta">
-                <h2>III. DeepSORT Tracking Algorithm</h2> (not ai)
+                <h2>III. Object Tracking Algorithm</h2>
                 <p>
-                    In the previous section, we discussed how to detect objects in a video frame using YOLO Object
-                    Detection. However, to obtain useful data for Intelligent Transportation Systems (ITS), we need to
-                    track the detected objects and obtain information on their flow. To achieve this, we can concatenate
-                    bounding boxes from different frames, and this process is known as tracking.
-                </p>
-                <p>
-                    In this section, we introduce the DeepSORT algorithm, which combines deep learning with traditional
-                    techniques for tracking. This algorithm achieves high tracking accuracy and robustness in complex
-                    scenarios. DeepSORT is an improvement on the Simple Online and Realtime Tracking (SORT) algorithm, a
-                    traditional tracking algorithm that can't handle occlusion. Occlusion refers to situations where an
-                    object is covered by other objects, causing track fragmentation or track loss. DeepSORT addresses
-                    this issue by using a deep learning model to score the similarity between the object in the current
-                    frame and the object in the previous frame.
-                </p>
-                <p>
-                    DeepSORT employs three core techniques:
-                <ul>
-                    <li><strong>Kalman Filter:</strong> an algorithm used in SORT to predict the object's position in
-                        the next frame. Kalman Filter estimates the object's position by using the object's position and
-                        velocity in the current frame.</li>
-                    <li><strong>Appearance Feature:</strong> the key idea of DeepSORT. It uses a deep learning model
-                        called ReID (short for "re-identification") to score the object's similarity based on appearance
-                        features. The ReID model is trained to classify an object's appearance.</li>
-                    <li><strong>Hungarian Algorithm:</strong> an algorithm used to match objects in the current frame
-                        with objects in the previous frame when it is challenging to match them using scores from Kalman
-                        Filter and ReID model.</li>
-                </ul>
-                </p>
-                <p>
-                    To help you understand how DeepSORT works, we have provided an interactive element where you can
-                    identify the right objects from six objects in each round. The target object is shown on the left,
-                    and six objects to be identified are shown on the right. Check the checkbox of the correct object
-                    and click the "Submit" button to submit your answer. If you check the wrong object, the checkbox
-                    will turn red, and the correct object will turn green. Let's try it out:
-                </p>
-
+                    Given the objects detected in each frame, this section describes an object tracking algorithm.
+                    Object tracking is to maintain the identify of objects as they move across the frames. In the other words,
+                    the obejects, which are likely to be the same identity, across frames are associated. Fig. 7 shows an 
+                    interactive element where you can try to identify the target object in the \(t-1\)-th frame 
+                    from six objects detected in the \(t\)-th frame. Readers may find that the intuition of object tracking is
+                    to find the object in the frame which is similar and close to the target object in the previous frame. 
+                </p> 
+                
                 <div class="framed" style="margin-bottom: 20px">
                     <!-- Additional class for responsiveness -->
                     <div class="inside">
                         <!-- Frame top blue text -->
-                        <div class="eyebrow">
+                        <!--<div class="eyebrow">
                             DeepSORT Demo
-                        </div>
+                        </div>-->
                         <div class="ds-demo">
                             <div class="ds-target" style="visibility: hidden; display:flex;">
                                 <p>Target</p>
@@ -507,142 +479,78 @@
                             </div>
                         </div>
                         <div class="ds-demo-score" style="display: none;">
-                            <p>Your accuracy: <span id="ds-demo-acc1">0</span>/10 (<span id="ds-demo-acc2">0</span>%)</p>
-                            <p>This is what DeepSORT doing, hope you to know it more!</p>
+ accuracy: <span id="ds-demo-acc1">0</span>/10 (<span id="ds-demo-acc2">0</span>%)</p>
+                            <!-- <p>This is what DeepSORT doing, hope you to know it more!</p> -->
                         </div>
                         <!-- Frame caption -->
-                        <div class="caption"><b>Figure 10:</b>DeepSORT Demo</div>
+                        <div class="caption"><b>Figure 7:</b> Associating objects in the consecutive frames </div>
                         <script src="js/ds_demo.js"></script>
                     </div>
                 </div>
-                <p>
-                    1. Component Introduction:
-                    A component can let user try to filter out the low confidence bbox.
-                    User can adjust the threshold of confidence, and the number of bbox
-                    will change in real time.
-                </p>
-                <p>
-                    2. User's Experience:
-                    User will know it is important to set the threshold of confidence,
-                    and how to set the threshold of confidence according to the result
-                    YOLO give.
-                </p>
-                <p>
-                    3. How to use?:
-                    User can adjust the threshold of confidence by the scroll bar, and
-                    the number of bbox will change in real time.
-                </p>
-                <p>
-                    4. What user will learn?:
-                    They will learn how to set the threshold of confidence according to
-                    the result YOLO give. And know that it is hard to set a perfect
-                    threshold of confidence because it might too high to filter in the
-                    right bbox or too low to filter out the wrong bbox.
-                </p>
-                <h3>Kalman Filter</h3> (ai)
-                <p>
-                    All the object tracking algorithms we have discussed so far rely on the Kalman Filter, a state
-                    estimator used for predicting future values based on past observations. It can estimate the state of
-                    any numerical value, such as the temperature of a room, the position of a car, the velocity of a
-                    ball, and more.
-                </p>
-                <p>
-                    In object tracking, the Kalman Filter is used to estimate the position of an object in the next
-                    frame. It utilizes the object's current position and velocity to make this estimation.
-                </p>
-
-                <p>
-                    The following interactive element demonstrates how the Kalman Filter works. Click the "Start" button
-                    to begin. The canvas displays bounding boxes, where the red bbox represents the target object's
-                    bbox, and it also shows the velocity in vector form. The length of the vector represents the
-                    object's speed. Draw the estimated bbox of the target object in the canvas. Try it out:
-                </p>
-
-                <div class="framed" style="margin-bottom: 20px;">
-                    <!-- Additional class for responsiveness -->
-                    <div class="inside">
-                        <!-- Frame top blue text -->
-                        <div class="eyebrow">
-                            Kalman filter
-                        </div>
-                        <div class="kf-container">
-                            <p>Frame: <span id="kf-frame">0</span></p>
-                            <canvas id="kf-canvas" width="900" height="450"></canvas>
-                            <button id="kf-btn">Start</button>
-                        </div>
-                        <!-- Frame caption -->
-                        <div class="caption"><b>Figure 11:</b>Kalman Filter</div>
-                        <script src="js/kalman_filter.js"></script>
-                    </div>
-                </div>
-                <p>
-                    1. Component Introduction:
-                    The purpose of this component is to help users learn how the Kalman Filter
-                    works by drawing the estimated bbox of a moving object. The component
-                    will show previous bbox around the object and vectors indicating
-                    its speed in previous frame, user need to guess the next bbox of the
-                    target object.
-                </p>
-                <p>
-                    2. User's Experience:
-                    They will learn how the Kalman Filter predict the next bbox of the
-                    target object by drawing the estimated bbox of target object.
-                </p>
-                <p>
-                    3. How to use?:
-                    User will see bunch of bbox in the canvas, user need to guess the
-                    next bbox of the target object by drawing the estimated bbox. The
-                    speed of the target object will be shown by the vector. User will
-                    see vector start from 2nd frame.
-                </p>
-                <p>
-                    4. What user will learn?:
-                    They will learn the way how the Kalman Filter predict the next bbox
-                    is similar to the way we predict the next bbox of the target object.
-                </p>
 
 
+                <p>
+                    This section takes DeepSORT (Deep Learning-based SORT) as an example of object tracking algorithms [].
+                    DeepSORT adds a deep learning-based component to SORT (Simple Online and Realtime Tracking) Algorithm.
+                    With extracting deep features of tracked objects, DeepSORT could associate detections with existing 
+                    tracks efficiently so that occlusions and track re-identification, which are challenging for traditional 
+                    tracking algorithms, could be overcome. Fig. 8 shows the high-level function diagram of DeepSORT. DeepSORT
+                    algorithm consists of the following steps:
+                    <ol>
+                        <li> <b>Object detection:</b> In each subsequent frame of the video, an object detection algorithm, e.g., YOLO, is performed to
+                            generate a set of object detections. 
+                        </li>
+                        <li> <b>Feature extraction:</b> For each detection, a set of high-level 
+                            features are extracted by a deep neural network, which are used to represent the <i>appearance</i> of 
+                            the object detected. 
+                        </li>
+                        <li> <b>Object association:</b> Hungarian algorithm[] is then used to associate each detection with an existing track or create 
+                            a new track if necessary. This is done by computing the distnace that integrates motion and 
+                            appearance information through combination of two appropriate metrics, say Mahalanobis distance and 
+                            consine distance.
+                        </li>
+                        <li>
+                            <b>Track management:</b> The algorithm updates the state of each track using the associated 
+                            detection. This includes updating the <i>Kalman filter</i>[] estimate of the position and velocity 
+                            of the tracked object, as well as updating the track's age and visibility.
+                        </li>
+                        <li> <b>Track deletion:</b> Finally, the algorithm deletes tracks that have not been updated for a 
+                            certain number of frames or that have been invisible for a certain number of frames.
+                        </li>
+                    </ol>
+                </p>
+                
+                <figure class="text-center">
+                    <img src="img/deepsort.png" alt="DeepSORT" width="700" height="500">
+                    <figcaption><strong>Figure 8:</strong> DeepSORT 
+                    </figcaption>
+                </figure>
+                
 
-                <h3>Similarity Score</h3> (not ai)
-                <p>
-                    In contrast to the SORT algorithm, DeepSORT uses a similarity score produced by a deep learning
-                    model to determine whether an object in the current frame is the same as an object in the previous
-                    frame after position prediction. This is the reason for the "Deep" in the name DeepSORT. The
-                    similarity score is a measure of how similar two objects are in appearance.
-                </p>
+                <p> Take a deeper look into the object association step in DeepSORT. Assigning the detections to  
+                    the existing tracks can be viewed as the assignment problem. The Hungarian algorithm is 
+                    a well-known optimization algorithm that can efficiently find the optimal assignment given a cost 
+                    matrix. In our case, Hungarian algorithm finds the most possible track that a newly coming detection
+                    should be associated with. The cost matrix here is a matrix \(C_{m \times n}\) where \(n\) is the number of detections 
+                    and \(m\) is the number of tracks. The value of \((i,j)\)-th entry in \(C\) is defined as 
+                    \(c_{i,j}=\lambda d^{(1)}(i,j)+(1-\lambda)d^{(2)}(i,j)\) where \(d^{(1)}(i,j)\) is the 
+                    Mahalanobis distance between the projection of the \(i\)-th track in appearance space and 
+                    \(j\)-th newly arrived bounding box, and \(d^{(2)}(i,j)\) is the smallest cosine distance between 
+                    the \(i\)−th track and \(j\)−th detection in appearance space. This cost matrix takes advantages of
+                    the Mahalanobis distance, which provides short-term predictions as it provides insights about 
+                    likely object locations based on motion cues, and the consine distance, which is useful for recovering 
+                    identities after long-term occlusions when motion cues are less discriminative as it considers 
+                    appearance information.
 
-                <h3>Hungarian Algorithm</h3> (ai)
-                <p>
-                    Once the similarity score and position prediction are done, most objects can be successfully
-                    associated with high similarity scores and close position predictions. However, there will be some
-                    objects left behind, either due to low similarity scores or inaccurate position predictions. In such
-                    cases, we need to pair the remaining objects or decide which object should start a new track.
-                </p>
-                <p>
-                    To solve this problem, we use the Hungarian Algorithm, which is a method to solve the assignment
-                    problem. The assignment problem is to find the best way to assign N workers to N jobs with a cost
-                    matrix. We can also view object pairing as an assignment problem, where we need to find the best way
-                    to pair all objects in the current frame with objects in the previous frame. The cost matrix is
-                    generated using the similarity score and position prediction. If the number of objects in the
-                    current frame is different from the previous frame, we need to add dummy objects to make the cost
-                    matrix square, representing the new objects or missing objects in the current frame.
-                </p>
-                <p>
-                    How does the Hungarian Algorithm pair objects using the cost matrix? Three steps need to be
-                    followed: row reduction, column reduction, and finding the minimum line that covers all zeros. Row
+                    Given the cost matrix, Hungarian algorithm proceeds three steps: row reduction, column reduction, 
+                    and finding the minimum line that covers all zeros. Row
                     reduction involves reducing the value of each row to the minimum value. Column reduction involves
                     reducing the value of each column to the minimum value. After row or column reduction, we need to
                     find the minimum line that covers all zeros. If the line number is equal to the number of objects in
                     the current frame, then we can pair the objects. If the line number is less than the number of
-                    objects in the current frame, we need to perform row or column reduction again.
-                </p>
-                <p>
-                    Here is an example of the Hungarian Algorithm. The cost matrix is 6 x 6, the number of objects in
-                    the current frame is 6, and the number of objects in the previous frame is 6. A low value in the
-                    cost matrix indicates that two objects are similar and close to each other, whereas a high value
-                    means that two objects are different and far away from each other. In the following interactive
-                    element, you can try performing the row reduction, column reduction, and finding the minimum line
-                    that covers all zeros yourself. Let's try it:
+                    objects in the current frame, we need to perform row or column reduction again. Fig. 9 shows an interactive
+                    example for readers to understand the Hungarian algorithm by performing 
+                    the row reduction, column reduction, and finding the minimum line that covers all zeros.
                 </p>
                 <div class="framed" style="margin-bottom: 20px">
                     <!-- Additional class for responsiveness -->
@@ -665,7 +573,7 @@
                                     <tr>
                                         <td></td>
                                         <td></td>
-                                        <td colspan="6">(previous frame)</td>
+                                        <td colspan="6">tracks</td>
                                         <td></td>
                                     </tr>
                                     <tr>
@@ -680,7 +588,7 @@
                                         <td></td>
                                     </tr>
                                     <tr>
-                                        <td rowspan="6" style="writing-mode: vertical-lr">(current frame)</td>
+                                        <td rowspan="6" style="writing-mode: vertical-lr">detections</td>
                                         <td>A'</td>
                                         <td>3</td>
                                         <td>9</td>
@@ -757,56 +665,17 @@
                             <button id="next-btn" style="display: none;">Next</button>
                         </div>
                         <!-- Frame caption -->
-                        <div class="caption"><b>Figure 12:</b>Hungarian Algorithm</div>
+                        <div class="caption"><b>Figure 9:</b>Hungarian algorithm</div>
                         <script src="js/hungarian.js"></script>
                     </div>
                 </div>
-                <p>
-                    1. Component Introduction:
-                    The purpose of this component is to let user know how the Hungarian
-                    algorithm works by showing the row reduction and column reduction
-                    process of the algorithm, and know how DeepSORT pair the objects
-                    in this way.
-                </p>
-                <p>
-                    2. User's Experience:
-                    They will experience the pairing process of the Hungarian algorithm
-                    with a few click. Doesn't need to see the code or math formula.
-                </p>
-                <p>
-                    3. How to use?:
-                    Click reduce button to do the row reduction and column reduction,
-                    and zeros will be marked on the table. If zeros is enough to
-                    pair all the objects, the pairing will be shown on the right
-                    side of the table.
-                </p>
-                <p>
-                    4. What user will learn?:
-                    They will learn how the Hungarian algorithm works, and know
-                    the pairing process is easy to understand, it's not like a
-                    black box or some magic, it's just some simple steps to reduce
-                    objects be paired.
-                </p>
 
-
-                <h3>Combining YOLO and DeepSORT</h3> (not ai)
-                <p>
-                    Now that we have covered how YOLO and DeepSORT work, let's see how we can combine them to track
-                    objects in videos. YOLO is used to detect objects in each frame of the video and DeepSORT is used to
-                    track those objects over time. The final result is a list of tracks, each corresponding to a unique
-                    object that was detected and tracked throughout the video.
-                </p>
-                <p>
-                    However, it is important to note that the results produced by these algorithms are not always
-                    correct and have their limitations. In some situations, objects may not be detected or tracked
-                    accurately due to various factors such as occlusion, changes in lighting conditions, or objects that
-                    visible size is too small because they are far away.
-                </p>
-                <p>
-                    In the interactive element below, you can see the results of combining YOLO and DeepSORT on a video
-                    captured by a camera at different times of the day and weather conditions. The options in the
-                    selector allow you to choose between different scenarios. Keep in mind that while the algorithm may
-                    perform well in some scenarios, it may not be as accurate in others:
+                <p> The final output of DeepSORT is a list of tracks where each track associates with a unique
+                    ID. Fig. 10 shows the results of DeepSORT of videos by a camera in different times of the day 
+                    and weather conditions. It can be seen that there is an ID associated with a bounding box which 
+                    shows the object is tracked among frames. On the other hand, DeepSORT may not always work well all the time.
+                    In some situations, objects may not be detected or tracked accurately due to various factors 
+                    such as occlusion, changes in lighting conditions, or the visible size of an object is too small to detect.
                 </p>
                 <div class="framed" style="margin-bottom: 20px">
                     <!-- Additional class for responsiveness -->
@@ -840,257 +709,29 @@
                             
                         </div>
                         <!-- Frame caption -->
-                        <div class="caption"><b>Figure 13:</b>Yolo & DeepSORT combine</div>
+                        <div class="caption"><b>Figure 10:</b> The result of DeepSORT</div>
                         <script src="js/yolo_deepsort.js"></script>
                     </div>
                 </div>
-                <p>
-                    1. Component Introduction:
-                    The purpose of this component is to let user know the result of
-                    DeepSORT with YOLO. And showing the result will change by the
-                    different time and weather. It's will vary in conditions.
-                </p>
-                <p>
-                    2. User's Experience:
-                    They will see differet result of DeepSORT with YOLO by different
-                    time and weather.
-                </p>
-                <p>
-                    3. How to use?:
-                    They can select different time and weather on the right side to
-                    see the result.
-                </p>
-                <p>
-                    4. What user will learn?:
-                    They will learn the importance of choose the right place to set
-                    up the camera. And make sure the camera can capture enough light
-                    from the road so that the algorithm can detect the object. And
-                    knowing the limitation of the algorithm.
-                </p>
             </section>
 
 
             <section id="fttrwa">
-                <h2>IV. From Theory to Real-World Application</h2> (ai)
+                <h2>IV. Intersection Turning Volume Calculation</h2>
                 <p>
-                    In this section, we will explore the practical steps involved in applying the YOLO-DeepSORT
-                    algorithm to real-world applications. While the theoretical understanding is important, it is
-                    equally crucial to know how to prepare data, train the model, and classify the tracks in real-world
-                    scenarios.
-                </p>
-                <p>
-                    One of the key factors that determines the performance of a deep learning algorithm is the quality
-                    and relevance of the data it is trained on. Although pre-trained models on public datasets are
-                    suitable in many cases, if the real-world data has unique characteristics that are not found in the
-                    public datasets, the model may not perform well. Therefore, we need to annotate and train the model
-                    using our own dataset.
-                </p>
+                    Computing intersection turning volmue is to count the number of 
+                    cars making any types of turns from each lane. Given the tracks of vehicles, an effective way to 
+                    classify the tracks is the hot-region-based approach where two types of hot regions, say red region and 
+                    green region, are set on each lane to detect if a vehicle enters into and leaves from the intersection. 
+                    For example, when a track pass through a red region in East and pass a green region in South, we can say
+                    that this vehicle turns right from East. It is worth mentioning that the positions and areas 
+                    of the hot regions should be carefully determined. In some case, the points of a track may be sparse when 
+                    the speed of a vehicle is fast but the FPS of the camera is low. The sparseness of a track would not guarentee
+                    if this track can pass through a red region or a green region, which could lead to the wrong results. 
+                    Fig. 11 allows readers to set the red region and green region of each lane at the
+                    intersection. Readers would find that the tracks in this example are sparse so that 
+                    the change of the positions or sizes of hot regions may cause the wrong turning volumes.  
 
-                <p>
-                    The first step in applying the algorithm to real-world scenarios is annotation, where we label
-                    objects in our dataset and create bounding boxes around them. This annotated dataset is then used to
-                    train the model.
-                </p>
-
-                <p>
-                    However, the quality of the model also depends on several other factors, such as the number of data
-                    samples, the model architecture, and the training parameters. Therefore, we need to tune the model
-                    by conducting experiments to find the optimal settings that yield the best results.
-                </p>
-
-                <p>
-                    Once we have a well-trained model, we can use it to track objects in real-world videos. In
-                    Intelligent Transportation Systems, it is essential to know the type of vehicle being tracked.
-                    Therefore, we need to classify the tracks based on the object's characteristics, such as its shape,
-                    size, and color. This step enables us to obtain additional insights and make more informed decisions
-                    based on the tracked objects' attributes.
-                </p>
-
-                <p>
-                    In the following section, we will provide a detailed guide on how to perform annotation, model
-                    tuning, and track classification to apply the YOLO-DeepSORT algorithm to real-world scenarios
-                    effectively.
-                </p>
-
-                <h3>Annotation: Creating a High-Quality Dataset</h3> (ai)
-                <p>
-                    In order to train a high-quality model, it is essential to have a high-quality dataset. This means
-                    that the process of annotation, or marking up the dataset with labels and bounding boxes, is a
-                    critical step. In this section, you can practice annotating objects using a simple version of a
-                    professional annotation tool. By doing so, you can get a sense of how long it takes to annotate
-                    objects accurately and the level of precision required to produce a high-quality dataset.
-                </p>
-                <p>
-                    The interactive tool below provides all the basic functions you need to annotate objects. You can
-                    use
-                    your mouse to draw bounding boxes around the objects, select the appropriate labels and object
-                    status,
-                    and submit your annotations. Keep in mind that annotation is a time-consuming task that requires
-                    careful attention to detail. The quality of your annotations will ultimately determine the quality
-                    of
-                    the model you are able to train:
-                </p>
-                <div class="framed" style="margin-bottom: 20px; width:1150px;">
-                    <!-- Additional class for responsiveness -->
-                    <div class="inside">
-                        <!-- Frame top blue text -->
-                        <div class="eyebrow">
-                            Annotation
-                        </div>
-                        <div class="ac-container">
-                            <div id="tip">
-                                <div class="text-center">
-                                    <span id="ac-tip-start">Click the start button to labeling the car in the
-                                        image.</span>
-                                </div>
-                                <button id="ac-start">Start</button>
-                            </div>
-                            <div class="sub-container">
-                                <div class="canvas-wrapper">
-                                    <canvas id="ac" width="656" height="494"></canvas>
-                                </div>
-                                <div style="width:25%">
-                                    <table id="ac-labels">
-                                        <tr>
-                                            <td style="width: 50px;">ID</td>
-                                            <td>label</td>
-                                            <td>state</td>
-                                        </tr>
-                                    </table>
-                                </div>
-                            </div>
-                            <div id="frame-btn">
-                                <button id="prev-frame" disabled="true">Backward</button>
-                                <button id="next-frame" disabled="true">Forward</button>
-                                <button id="ac-finish">Complete</button>
-                                <div>
-                                    <p id="ac-timer"></p>
-                                    <p id="ac-totalSec"></p>
-                                    <p id="ac-perSec"></p>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Frame caption -->
-                        <div class="caption"><b>Figure 14:</b>Annotation</div>
-                        <script src="js/annotation.js"></script>
-                    </div>
-                </div>
-                <p>
-                    1. Component Introduction:
-                    The purpose of this component is to let user try the process of
-                    annotating the object.
-                </p>
-                <p>
-                    2. User's Experience:
-                    They will go through the process of annotating the object. And
-                    knowing it has great different doing by different people.
-                </p>
-                <p>
-                    3. How to use?:
-                    Drawing the bounding box around the object. And select the label
-                    of the object. If the object is outside the image, you can select
-                    the status to be "outside", if the object is occluded, you can
-                    select the status to be "occluded". Click Forward button to go
-                    to the next image. Click Backward button to go to the previous
-                    image. Click Complete button to finish the annotation. User will
-                    see how many time cost per frame.
-                </p>
-                <p>
-                    4. What user will learn?:
-                    They will learn it's important to establish a standard for
-                    annotating the object. And they will know the job is time
-                    consuming, so they need some people to help with this job.
-                </p>
-
-                <h3>Model Tuning</h3> (ai)
-                <p>
-                    Training a deep learning model requires setting various hyperparameters, such as the learning rate,
-                    number of epochs, and batch size. These hyperparameters can greatly impact the performance of the
-                    model. In this section, we will discuss the process of tuning these hyperparameters to find the best
-                    set for our specific application.
-                </p>
-                <p>
-                    One important metric for evaluating the performance of the model during training is the loss
-                    function. The loss function measures how well the model is predicting the output for a given input.
-                    A good loss function should steadily decrease during training and eventually converge to a low
-                    value. However, if the loss is too low, the model may be overfitting to the training data, which
-                    will result in poor performance on new, unseen data.
-                </p>
-                <p>
-                    To find the best set of hyperparameters, we can experiment with different values and observe the
-                    loss graph during training. The following interactive tool allows you to visualize the loss graph of
-                    the model when using different hyperparameters. You can select different hyperparameters from the
-                    drop-down menu and click the "Start" button to see the corresponding loss graph.
-                </p>
-                <div class="framed" style="margin-bottom: 20px">
-                    <!-- Additional class for responsiveness -->
-                    <div class="inside">
-                        <!-- Frame top blue text -->
-                        <div class="eyebrow">
-                            Model Tuning
-                        </div>
-                        <div class="training-container">
-                            <div id="chart"></div>
-                            <div id="training-control">
-                                <select>
-                                    <option value="0">noise added</option>
-                                    <option value="1">without noise</option>
-                                    <option value="2">high learning rate</option>
-                                    <option value="3">low learning rate</option>
-                                </select>
-                                <button>Start</button>
-                            </div>
-                        </div>
-                        <!-- Frame caption -->
-                        <div class="caption"><b>Figure 15:</b>Model Tuning</div>
-                        <script src="js/training.js"></script>
-                    </div>
-                </div>
-                <p>
-                    1. Component Introduction:
-                    The purpose of this component is to let user see how hyperparameters
-                    affect the training process.
-                </p>
-                <p>
-                    2. User's Experience:
-                    They will see how the loss graph changes with the number of
-                    iterations. And they will see how the hyperparameters affect the
-                    training process.
-                </p>
-                <p>
-                    3. How to use?:
-                    Select the setting on the right side. Click Start button to start
-                    seeing the training process. The loss function will be shown on
-                    the left side changing with the number of iterations.
-                </p>
-                <p>
-                    4. What user will learn?:
-                    They will learn some basic knowledge about setting hyperparameters,
-                    and they will know what kind of loss graph they should see.
-                </p>
-                <h3>Track Classification</h3> (ai)
-                <p>
-                    Once we have obtained the tracks of the objects, the next step is to turn them into useful
-                    information for Intelligent Transportation System (ITS). In the case of intersections, ITS needs to
-                    know the number of cars making left turns, right turns, and going straight. Therefore, we need to
-                    classify the tracks into different categories. In this section, we introduce a simple method to
-                    classify the tracks.
-                </p>
-                <p>
-                    The simplest and most effective way to classify the tracks is by drawing the in/out detection area
-                    of each lane on the intersection. The in/out detection area is a polygonal area, and when a track
-                    crosses this area, we can classify it into different categories. However, there is a tricky problem
-                    here. The edges of the area are highly sensitive, and even a slight change in the edge can have a
-                    significant impact on the track count. Therefore, it is essential to pay attention and draw an
-                    accurate in/out detection area.
-                </p>
-                <p>
-                    Below is an interactive tool that allows you to draw the in/out detection area of each lane on the
-                    intersection. You can adjust the polygon by dragging the corners, and you can move the whole polygon
-                    by dragging the center. The red area indicates the area in which the track will be classified as
-                    "out," and the green area indicates the area in which the track will be classified as "in." Changing
-                    the area will adjust the track count in real-time on the right side, allowing you to see the effect
-                    of the area. Give it a try:
                 </p>
                 <div class="framed" style="margin-bottom: 20px; width:900px;">
                     <!-- Additional class for responsiveness -->
@@ -1105,84 +746,56 @@
                                 <thead>
                                     <tr>
                                         <th></th>
-                                        <th>car</th>
+                                        <th>Number of cars</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <tr class="tc-count">
-                                        <th>down to up</th>
+                                        <th>South to North</th>
                                         <td>0</td>
                                     </tr>
                                     <tr class="tc-count">
-                                        <th>down to right</th>
+                                        <th>South to East</th>
                                         <td>0</td>
                                     </tr>
                                     <tr class="tc-count">
-                                        <th>down to left</th>
+                                        <th>South to West</th>
                                         <td>0</td>
                                     </tr>
                                     <tr class="tc-count">
-                                        <th>left to right</th>
+                                        <th>West to East</th>
                                         <td>0</td>
                                     </tr>
                                     <tr class="tc-count">
-                                        <th>right to left</th>
+                                        <th>East to left</th>
                                         <td>0</td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
                         <!-- Frame caption -->
-                        <div class="caption"><b>Figure 16:</b>Track Classification</div>
+                        <div class="caption"><b>Figure 11:</b>Hot-region-based approach for intersection turning volume computation</div>
                         <script src="js/track.js"></script>
                     </div>
                 </div>
-                <p>
-                    1. Component Introduction:
-                    The purpose of this component is to let user classify the track by
-                    drawing in/out zone on the canvas.
-                </p>
-                <p>
-                    2. User's Experience:
-                    They will see the car turning count changing when they draw in/out
-                    zone on the canvas. And knowing a little change will affect the
-                    result.
-                </p>
-                <p>
-                    3. How to use?:
-                    Click on the canvas to draw and adjust in/out zone. Out zone is
-                    red, in zone is green, drag the corner of the polygon to adjust.
-                </p>
-                <p>
-                    4. What user will learn?:
-                    They will learn it is hard to draw a perfect in/out zone, a little
-                    change will affect the result lot.
-                </p>
+                
             </section>
             <section id="conclusion">
-                <h2>Conclusion</h2> (ai)
+                <h2>Conclusion</h2> 
                 <p>
-                    The technologies we have introduced can overcome the limitations of traditional car flow information
-                    collection methods, such as the labor-intensive and time-consuming car count method. Instead, they
-                    enable the real-time capture and analysis of traffic conditions, allowing for efficient traffic
-                    management and improved traffic flow.
-                </p>
-                <p>
-                    We have delved into the basic concepts of Object Tracking, making it easier for you to understand
-                    how such an AI algorithm works with the help of an interactive tool. Our aim is to provide you with
-                    an overall insight into these black-box-like techniques, so that when you try to implement them in
-                    your own project, you will know what to avoid and where to apply them.
-                </p>
-                <p>
-                    Furthermore, we have shared some tricks for better implementing the Object Tracking algorithm in ITS
-                    applications, helping you to avoid common mistakes and save time when implementing it. We have
-                    covered topics such as how to classify tracks, how to improve the accuracy of the algorithm, and
-                    what a good model training process should look like.
-                </p>
-                <p>
-                    In conclusion, after reading this paper, you can confidently implement the Object Tracking algorithm
-                    in real-world applications, use it to gather traffic information, and adjust traffic management
-                    strategies accordingly.
+                    The increasing urbanization of the human population has led to the growth of intelligent transportation systems, 
+                    and this paper demonstrates the construction of an efficient pipeline for measuring the intersection turning volume, 
+                    a crucial task in the transportation field. Based on computer vision techniques, this pipeline involves four main 
+                    components: 1) traffic monitoring cameras to obtain videos of the intersection with a clear view; 
+                    2) an object detection algorithm to detect the location of an object and identify which type of vehicle 
+                    the detected object is, and identify objects in the video footage; 3) an object tracking algorithm to associate 
+                    the objects detected by the object detection algorithm across multiple frames to generate a track of each vehicle; 
+                    and 4) an intersection turning volume calculation to identify the lanes where the starting point and the end point of 
+                    a track are located to compute the intersection turning volume. The paper presents comprehensive overview with
+                    interactive elements for the core techniques of each component, including YOLO v1, DeepSORT and a hot-region-based 
+                    approach for calculating intersection turning volume. The paper's insights into the implementation of these techniques 
+                    can help readers understand the benefits of the computer-vision-based pipeline which could overcome the limitations of 
+                    traditional manual counting methods and provide real-time traffic analysis. 
                 </p>
             </section>
             <section id="references">
