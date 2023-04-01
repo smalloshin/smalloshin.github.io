@@ -44,6 +44,7 @@ let now = new Date().getTime();
                         }
                         
                     );
+                    el.val(el.data("ans"))
                 })),
                 introductionBtn.hide(),
                 clearInterval(timer),
