@@ -50,8 +50,7 @@ let now = new Date().getTime();
                 clearInterval(timer),
                 $(".video-frame")[0].pause(),
                 $(".video-frame")[0].controls = false,
-                $("#description").text("Correct answers will be green, too low will be red, and too high will be purple."),
-                $("#intro-timer").text("You use "+$("#intro-timer").text()+" to finish the task, while the algorithm only use 182.37s, and achieve over 90% accuracy.")
+                $("#intro-timer").text("You use "+$("#intro-timer").text())
             );
     });
 })();
