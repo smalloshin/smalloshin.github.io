@@ -278,7 +278,7 @@
                     identifies the location of vehicles in each frame of a video and classifies them into a type of 
                     vehicles, e.g., small car, big car, and motorcycle. This paper takes YOLOv1, one of the 
                     most classical object detection algorithm,  as an example as YOLO family are 
-                    open-sourced and production-ready object detection algorithms []. 
+                    open-sourced and production-ready object detection algorithms [<a href="#ref_1">1</a>][<a href="#ref_2">2</a>]. 
                     
                     As object detection is a supervised task, it is necessary to prepare training datasets for training
                     a YOLO model. Fortunately, the pretrained model of YOLO is available so that we can only label 
@@ -491,8 +491,8 @@
 
 
                 <p>
-                    This section takes DeepSORT (Deep Learning-based SORT) as an example of object tracking algorithms [].
-                    DeepSORT adds a deep learning-based component to SORT (Simple Online and Realtime Tracking) Algorithm.
+                    This section takes DeepSORT (Deep Learning-based SORT) as an example of object tracking algorithms [<a href="#ref_3">3</a>].
+                    DeepSORT adds a deep learning-based component to SORT (Simple Online and Realtime Tracking) Algorithm [<a href="#ref_4">4</a>].
                     With extracting deep features of tracked objects, DeepSORT could associate detections with existing 
                     tracks efficiently so that occlusions and track re-identification, which are challenging for traditional 
                     tracking algorithms, could be overcome. Fig. 8 shows the high-level function diagram of DeepSORT. DeepSORT
@@ -505,14 +505,14 @@
                             features are extracted by a deep neural network, which are used to represent the <i>appearance</i> of 
                             the object detected. 
                         </li>
-                        <li> <b>Object association:</b> Hungarian algorithm[] is then used to associate each detection with an existing track or create 
+                        <li> <b>Object association:</b> Hungarian algorithm[<a href="#ref_5">5</a>] is then used to associate each detection with an existing track or create 
                             a new track if necessary. This is done by computing the distnace that integrates motion and 
                             appearance information through combination of two appropriate metrics, say Mahalanobis distance and 
                             consine distance.
                         </li>
                         <li>
                             <b>Track management:</b> The algorithm updates the state of each track using the associated 
-                            detection. This includes updating the <i>Kalman filter</i>[] estimate of the position and velocity 
+                            detection. This includes updating the <i>Kalman filter</i>[<a href="#ref_6">6</a>] estimate of the position and velocity 
                             of the tracked object, as well as updating the track's age and visibility.
                         </li>
                         <li> <b>Track deletion:</b> Finally, the algorithm deletes tracks that have not been updated for a 
@@ -799,9 +799,68 @@
                     traditional manual counting methods and provide real-time traffic analysis. 
                 </p>
             </section>
-            <section id="references">
+            <section class="references">
                 <h2>References</h2>
-            </section>
+                <ol>
+                  <li id="ref_1">
+                    You Only Look Once: Unified, Real-Time Object Detection.
+                    <br>
+                    <span>
+                        Redmon, J., Divvala, S., Girshick, R., and Farhadi A., 2016. IEEE Conference on Computer Vision and Pattern Recognition (CVPR), pp. 779--788.
+                      DOI: <a href="https://doi.org/10.1109/CVPR.2016.91" target="_blank">
+                        10.1109/CVPR.2016.91</a>
+                    </span>
+                  </li>
+                  <li id="ref_2">
+                    Deep Cosine Metric Learning for Person Re-identification.    
+                    <br>
+                    <span>
+                        Wojke, N. and Bewley, A, 2018. IEEE Winter Conference on Applications of Computer Vision (WACV), pp. 748--756.  
+                    DOI: <a href="https://doi.org/10.1109/WACV.2018.00087 target="_blank">
+                        10.1109/WACV.2018.00087</a>
+                    </span>
+                  </li>
+                  <li id="ref_3">
+                    Simple Online and Realtime Tracking with a Deep Association Metric.
+                    <br>
+                    <span>
+                        Wojke, N. and Bewley, A. and Paulus, D., 2017. IEEE International Conference on Image Processing (ICIP), pp. 3654--3649.
+                      DOI: <a href="https://doi.org/10.1109/ICIP.2017.8296962" target="_blank">
+                        10.1109/ICIP.2017.8296962</a>
+                    </span>
+                  </li>
+                  <li id="ref_4">
+                    Simple Online And Realtime Tracking
+                    <br>
+                    <span>
+                        Bewley, A., Ge, Z., Ott, L., Ramos, F., and Upcroft, B., 2016. IEEE International Conference on Image Processing (ICIP),
+                        pp. 3464-3468.
+                        . DOI:  
+                    <a href="https://doi.org/10.1109/ICIP.2016.7533003." target="_blank">
+                        10.1109/ICIP.2016.7533003.</a>
+                    </span>
+                  </li>
+                  
+                  <li id="ref_5">
+                    The Hungarian Method for the Assignment Problem.
+                  <br>
+                  <span>
+                  Kuhn, H., 1955. Naval Research Logistics Quarterly, Vol 2(1-2), pp. 83--97. DOI: 
+                  <a href="https://doi.org/10.1002/nav.3800020109" target="_blank">10.1002/nav.3800020109</a>
+                  </span>
+                  </li>
+                  <li id="ref_6">
+                  Equilibria problems on games: Complexity versus succinctness. 
+                  <br>
+                  <span>
+                    Pei, Y., Biswas, S., Fussell, D. S., and Pingali, K., 2019. Communications of ACM, 
+                  Vol 62(11), pp. 122--133. DOI: <a href="https://doi.org/10.1145/3363294" target="_blank">https://doi.org/10.1145/3363294</a>
+                  </span>
+                  </li>
+                 </ol>
+              </se
+        ction>
+        
 
         </div>
     </article>
