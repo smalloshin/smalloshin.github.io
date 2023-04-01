@@ -157,10 +157,12 @@
                         <div class="inside">
                             <!-- Frame top blue text -->
                             <div class="eyebrow">
-                                Introduction
+                                To tally the number of cars, click on the "Start" button and input your responses into the table located 
+                                on the right-hand side. Once finished, hit the "Submit" button to verify the accuracy of your answers. 
+                                Additionally, you can measure the time it takes to count the cars manually.
                             </div>
                             <div class="text-center">
-                                <p><span id="description">To count the cars, click on the "Start" button and enter your answers in the table on the right-hand side.</span></p>
+                                <p><span id="description"></span></p>
                                 <p><span id="intro-timer">0</span></p>
                                 <p></p>
                             </div>
@@ -168,16 +170,16 @@
                                 <div class="introduction-video">
                                     <!-- Right-up corner text -->
                                     <div style="justify-content: space-between; display: flex;">
-                                        <div>Up</div>
-                                        <div>Right</div>
+                                        <div>North</div>
+                                        <div>Easet</div>
                                     </div>
                                     <video class="video-frame" width="437" height="329" style="pointer-events:none;" muted>
                                         <source src="data/introduction/Ko-PER_Intersection_Sequence1d_KAB_SK_1_undist.mp4" type="video/mp4">
                                         Your browser does not support the video tag.
                                     </video>
                                     <div style="justify-content: space-between; display: flex;">
-                                        <div>Left</div>
-                                        <div>Down</div>
+                                        <div>West</div>
+                                        <div>South</div>
                                     </div>
                                 </div>
                                 <!-- Empty placeholder -->
@@ -197,37 +199,37 @@
                                         </thead>
                                         <tbody style="align-items: center;">
                                             <tr class="count-ans">
-                                                <th>down to up</th>
+                                                <th>South to North</th>
                                                 <td><input type="number" value="0" data-ans="28"></td>
                                                 <td><input type="number" value="0" data-ans="0"></td>
                                                 <td><input type="number" value="0" data-ans="0"></td>
                                             </tr>
                                             <tr class="count-ans">
-                                                <th>up to down</th>
+                                                <th>North to South</th>
                                                 <td><input type="number" value="0" data-ans="27"></td>
                                                 <td><input type="number" value="0" data-ans="3"></td>
                                                 <td><input type="number" value="0" data-ans="0"></td>
                                             </tr>
                                             <tr class="count-ans">
-                                                <th>down to right</th>
+                                                <th>South to East</th>
                                                 <td><input type="number" value="0" data-ans="3"></td>
                                                 <td><input type="number" value="0" data-ans="1"></td>
                                                 <td><input type="number" value="0" data-ans="1"></td>
                                             </tr>
                                             <tr class="count-ans">
-                                                <th>down to left</th>
+                                                <th>South to West</th>
                                                 <td><input type="number" value="0" data-ans="1"></td>
                                                 <td><input type="number" value="0" data-ans="0"></td>
                                                 <td><input type="number" value="0" data-ans="0"></td>
                                             </tr>
                                             <tr class="count-ans">
-                                                <th>up to right</th>
+                                                <th>North to East</th>
                                                 <td><input type="number" value="0" data-ans="1"></td>
                                                 <td><input type="number" value="0" data-ans="0"></td>
                                                 <td><input type="number" value="0" data-ans="0"></td>
                                             </tr>
                                             <tr class="count-ans">
-                                                <th>up to left</th>
+                                                <th>North to West</th>
                                                 <td><input type="number" value="0" data-ans="3"></td>
                                                 <td><input type="number" value="0" data-ans="0"></td>
                                                 <td><input type="number" value="0" data-ans="0"></td>
@@ -241,7 +243,7 @@
                                 
                             </div>
                             <!-- Frame caption -->
-                            <div class="caption"><b>Figure 1:</b> Counting the traffic volume manually</div>
+                            <div class="caption"><b>Figure 1:</b> Counting the turning volume manually</div>
                             <script src="js/introduction.js"></script>
                         </div>
                     </div>
@@ -300,13 +302,11 @@
                     <div class="inside">
                         <!-- Frame top blue text -->
                         <div class="eyebrow">
-                            Simple Annotation
+                            To annotate the car in the image, click on the "Start" button and click on the "Finish" button when you are finished with your annotation.
                         </div>
                         <div class="annotation-container">
                             <div id="tip">
                                 <div class="text-center">
-                                    <p id="tip-start">Click the start button to annotating the car in the image.</p>
-                                    <p id="tip-finish">Click the finish button when your annotation is done.</p>
                                     <button id="btn-start">Start</button>
                                     <button id="btn-finish">Finish</button>
                                     <button id="btn-reset">Reset</button>
@@ -347,8 +347,7 @@
                 Take a deep dive into the technical detail. In YOLO v1, convolutional neural network could learn the filters,
                 which can extract meaningful features (represented as heatmaps) from an image, by finishing the downstream task, i.e., prediction the 
                 location of the bounding box and the category of an object in this case. These learnt filters can be then used
-                to extract mearningful features for unseen images. Fig. 5 visualizes a frame before and after a learnt filter is 
-                applied where filters are selected from the CNN in YOLO v1 trained by our real dataset. It can be seen that various features of this frame
+                to extract mearningful features for unseen images. Fig. 5 visualizes a frame with and without a learnt filter applied where filters are selected from the CNN in YOLO v1 trained by our real dataset. It can be seen that various features of this frame
                 could be emphasized, which could be useful for object localization and identification.
                 </p>
 
@@ -357,7 +356,7 @@
                     <div class="inside">
                         <!-- Frame top blue text -->
                         <div class="eyebrow">
-                            YOLO Extract feature from image (apply filter)
+                            Choose the desired filter type and adjust the slider to preview the images with and without the filter applied.
                         </div>
                         <div class="yolo-extract-container">
                             <div class="yolo-extract-image">
@@ -376,7 +375,7 @@
                             </div>
                         </div>
                         <!-- Frame caption -->
-                        <div class="caption"><b>Figure 5:</b> YOLO Extract feature from image (apply filter)</div>
+                        <div class="caption"><b>Figure 5:</b> Extract feature from image by applying filters</div>
                         <script src="js/yolo_extract.js"></script>
                     </div>
                 </div>
@@ -402,10 +401,10 @@
                     <div class="inside">
                         <!-- Frame top blue text -->
                         <div class="eyebrow">
-                            Filtering False Positives with Confidence Threshold
+                            Adjust the slider to set the confidence threshold, and observe how the number of detected objects changes accordingly.
                         </div>
                         <div class="text-center">
-                            <p>Drag the slider to set the threshold of confidence, set it to proper value.</p>
+               
                         </div>
                         <div class="yolo-filter-container">
                             <canvas id="f" width="1280" height="360"></canvas>
@@ -415,7 +414,7 @@
                             </div>
                         </div>
                         <!-- Frame caption -->
-                        <div class="caption"><b>Figure 6:</b>Filtering False Positives with Confidence Threshold</div>
+                        <div class="caption"><b>Figure 6:</b>Object detected with different confidence threshold settings</div>
                         <script src="js/yolo_filter.js"></script>
                     </div>
                 </div>
@@ -438,9 +437,11 @@
                     <!-- Additional class for responsiveness -->
                     <div class="inside">
                         <!-- Frame top blue text -->
-                        <!--<div class="eyebrow">
-                            DeepSORT Demo
-                        </div>-->
+                        <div class="eyebrow">
+                            To begin this interactive element, click the "Start" button. Your task is to identify the target 
+                            object from a group of six objects detected in the following frame on the right-hand side. 
+                            Once you have made your selection, click the "Done" button to reveal the correct answer.
+                        </div>
                         <div class="ds-demo">
                             <div class="ds-target" style="visibility: hidden; display:flex;">
                                 <p>Target</p>
@@ -475,7 +476,7 @@
                             <p> </p>
                             <p> </p>
                             <div style="display: block">
-                                <button class="demo-next">START</button>
+                                <button class="demo-next">Start</button>
                             </div>
                         </div>
                         <div class="ds-demo-score" style="display: none;">
@@ -557,7 +558,7 @@
                     <div class="inside">
                         <!-- Frame top blue text -->
                         <div class="eyebrow">
-                            Hungarian Algorithm
+                            By clicking on the "row reduction" and "column reduction" buttons, you can see the red lines that cover all the zeros.
                         </div>
                         <div class="hungarian-container">
                             <div id="hungarian-result" style="display: none;">
@@ -682,7 +683,7 @@
                     <div class="inside">
                         <!-- Frame top blue text -->
                         <div class="eyebrow">
-                            Yolo & DeepSORT combine
+                            To view the results of DeepSORT, select a time from the dropdown menu and click on the "Show" button.
                         </div>
                         <div class="yolo-deepsort-container" style="margin-left: 9%">
                             <div class="video-container" style="position: relative; margin-right: 20px">
@@ -738,7 +739,7 @@
                     <div class="inside">
                         <!-- Frame top blue text -->
                         <div class="eyebrow">
-                            Track classification
+                            Make changes to the position and size of the red and green regions and observe the effect on the turning volumes.
                         </div>
                         <div class="tc-container">
                             <canvas id="tc-canvas" width="650"></canvas>
