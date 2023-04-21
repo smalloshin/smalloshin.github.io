@@ -81,7 +81,7 @@ analytics:
 # Site Author
 author:
   name             : "Dr. Chih-Chieh Hung"
-  avatar           : "profile.png"
+  avatar           : "oshin.png"
   bio              : "Associate Professor/Data Scientist/Experienced IT Executive"
   location         : "Taiwan"
   employer         :
@@ -101,8 +101,8 @@ author:
   keybase          :
   instagram        :
   impactstory      : #"https://profiles.impactstory.org/u/xxxx-xxxx-xxxx-xxxx"
-  lastfm           : "https://www.linkedin.com/in/oshin-chih-chieh-hung-5b783631/"
-  linkedin         :
+  lastfm           : 
+  linkedin         : "https://www.linkedin.com/in/oshin-chih-chieh-hung-5b783631/"
   orcid            : "https://orcid.org/0000-0002-6972-6577"
   pinterest        :
   soundcloud       :
