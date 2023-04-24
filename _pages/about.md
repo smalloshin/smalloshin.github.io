@@ -1,6 +1,6 @@
 ---
 permalink: /
-title: "Dr. Chih-Chieh Hung's academic website"
+title: "Dr. Chih-Chieh Hung"
 excerpt: "About me"
 author_profile: true
 redirect_from: 
