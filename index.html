@@ -810,13 +810,13 @@
 
         // Add smooth scrolling and entrance animations
         document.addEventListener('DOMContentLoaded', function() {
-            const sections = document.querySelectorAll('.section, .publications-section, .awards-section');
+            const sections = document.querySelectorAll('.section, .awards-section');
             
             const observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {
-                        entry.target.style.opacity = '1';
-                        entry.target.style.transform = 'translateY(0)';
+                        entry.target.classList.add('in-view');
+                        observer.unobserve(entry.target); // Stop observing once in view
                     }
                 });
             }, { threshold: 0.1 });
