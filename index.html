@@ -317,11 +317,6 @@
             display: block;
         }
 
-        .section.in-view {
-            opacity: 1 !important;
-            transform: translateY(0) !important;
-        }
-
         @media (max-width: 768px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -366,11 +361,12 @@
         </header>
 
         <nav class="nav-tabs">
-            <button class="tab-button active" onclick="showTab('overview', this)">Overview</button>
-            <button class="tab-button" onclick="showTab('research', this)">Research</button>
-            <button class="tab-button" onclick="showTab('publications', this)">Publications</button>
-            <button class="tab-button" onclick="showTab('awards', this)">Awards</button>
-        </nav>
+    <button class="tab-button active" onclick="showTab(event, 'overview')">Overview</button>
+    <button class="tab-button" onclick="showTab(event, 'research')">Research</button>
+    <button class="tab-button" onclick="showTab(event, 'publications')">Publications</button>
+    <button class="tab-button" onclick="showTab(event, 'awards')">Awards</button>
+</nav>
+
 
         <div id="overview" class="tab-content active">
             <div class="main-content">
@@ -630,4 +626,213 @@
 
                 <div class="paper-item">
                     <div class="paper-title">A Regression-based Approach for Mining User Movement Patterns from Random Sample Data</div>
-                    <div class="paper-details
+                    <div class="paper-details">C.-C. Hung, W.-C. Peng, <em>Data and Knowledge Engineering</em>, Vol. 70, No. 1, pp. 1-20, 2011</div>
+                </div>
+
+                <h3 style="color: #225544; margin-top: 40px; margin-bottom: 20px;">Conference Papers</h3>
+
+                <div class="paper-item">
+                    <div class="paper-title">Causality-Driven Patent Valuation: Integrating Domain Knowledge and Language Models in a Structured Interview-Like Selection Process</div>
+                    <div class="paper-details">C.-W. Kuo, Y.-C. Tseng, W.-C. Peng, C.-C. Hung, H.-N. Su, <em>Proceedings of International Conference on Technologies and Applications of Artificial Intelligence</em>, 2024</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">Predicting 24-Hour Emergency Room Revisits: A Concept Bottleneck Approach</div>
+                    <div class="paper-details">Y.-C. Tseng, C.-T. Dao, C.-W. Kuo, F.-M. Hung, C.-C. Hung, W.-C. Peng, <em>Proceedings of International Conference on Technologies and Applications of Artificial Intelligence</em>, 2024</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">Using Local Gradient Compensation in Federated Learning for Improving Privacy and Performance</div>
+                    <div class="paper-details">J.-W. Chang, W.-C. Chen, C.-C. Hung, <em>the 14th International Conference on Frontier Computing</em>, 2024</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">Air Pollution Source Tracing Framework: Leveraging Microsensors and Wind Analysis for Pollution Source Identification</div>
+                    <div class="paper-details">C.-C. Hung, H.-E. Hsiao, C.-C. Lin, H.-H. Hsu, <em>Proceedings of International Conference on Technologies and Applications of Artificial Intelligence</em>, 2023</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">STGNN: A Data-Driven Spatial-Temporal Graph Neural Network for Docked Bike Prediction</div>
+                    <div class="paper-details">G. Li, X.Wang, G. S. Njoo, S. Zhong, S.-H. Gary Chan, C.-C. Hung, W.-C. Peng, <em>Proceedings of International Conference on Data Engineering (ICDE)</em>, 2022</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">A Hybrid Deep Learning Network for Long-Term Travel Time Prediction in Freeways</div>
+                    <div class="paper-details">M.-C. Ho, Y. -C. Chen, C.-C. Hung*, H.-C. Wu, <em>Proceedings of IEEE International Conference on Artificial Intelligence and Knowledge Engineering (AIKE)</em>, 2021</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">Spatial-Temporal Similarity for Trajectories with Location Noise and Sporadic Sampling</div>
+                    <div class="paper-details">G. Li, C.-C. Hung, M. Liu, L. Pan, W.-C. Peng , S.-H. Chan, <em>Proceedings of International Conference on Data Engineering (ICDE)</em>, 2021</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">PTGF: Public Transport General Framework for Identifying Transport Modes Based on Cellular Data</div>
+                    <div class="paper-details">X. Guo, C.-C. Hung, G. Li, W.-C. Peng, <em>Proceedings of International Conference on Mobile Data Management (MDM)</em>, 2019</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">Deep Candlestick Predictor: A Framework Toward Forecasting the Price Movement from Candlestick Charts</div>
+                    <div class="paper-details">S.-J. Guo, C.-C. Hung*, F.-C. Hsu, <em>Proceedings of International Symposium on Parallel Architectures, Algorithms and Programming</em>, 2018</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">TripDecoder - A Framework of Inferring Passengers' Routes in MRT Systems By Using Smart Card Transaction Data</div>
+                    <div class="paper-details">Y. Wang, C.-C. Hung, B. Zheng, E.-P. Lim, <em>Proceedings of International Workshop on Data-driven Intelligent Transportation (In conjunction with ICDM)</em>, 2018</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">Are You on the Right Track? Learning Career Tracks for Job Movement Analysis</div>
+                    <div class="paper-details">M.-F. Chiang, E.-P. Lim, W.-C. Lee, Y. Tian, C.-C. Hung, <em>Proceedings of International Workshop on Data Science for Human Capital Management (In conjunction with ECML/PKDD)</em>, 2018</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">Identifying Niche Singers in Online Music Streaming Services</div>
+                    <div class="paper-details">C.-C. Hung, C.-Y. Kuo, H.-H. Hsu, Y.-A. Chen, <em>Proceedings of 4th International Conference on Big Data Intelligence and Computing and Cyber Science and Technology Congress (CyberSciTech)</em>, 2018</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">Fusion of Modern and Tradition: A Multi-stage- Based Deep Network Approach for Head Detection</div>
+                    <div class="paper-details">F.-C. Hsu, C.-C. Hung*, <em>Proceedings of Advances in Knowledge Discovery and Data Mining - 22nd Pacific-Asia Conference (PAKDD)</em>, 2018</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">A velocity-preserving trajectory simplification approach</div>
+                    <div class="paper-details">C.-Y. Lin, C.-C. Hung, P.-R. Lei, <em>Proceedings of Conference on Technologies and Applications of Artificial Intelligence (TAAI)</em>, 2016</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">BRF: A Framework of Retrieving Brand Names of Products in Auction Sites</div>
+                    <div class="paper-details">Ivy H.-I. Hoi, Mars L. Liao, C.-C. Hung, Evans Tseng, <em>Proceedings of E- Commerce and Web Technologies (EC-WEB)</em>, 2013</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">On Discovery of Traveling Companions from Streaming Trajectories</div>
+                    <div class="paper-details">Lu-An Tang, Y. Zheng, J. Yuan, Jiawei Han, Alice Leung, C.-C. Hung, and W.-C. Peng, <em>Proceedings of the 28th IEEE International Conference on Data Engineering</em>, 2012</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">Mining trajectory profiles for discovering user communities</div>
+                    <div class="paper-details">C.-C. Hung, C.-W. Chang, W.-C. Peng, <em>Proceedings of the 1st Workshop on Location- Based Social Networks (in conjunction with ACM GIS)</em>, 2009</div>
+                </div>
+
+                <h3 style="color: #225544; margin-top: 40px; margin-bottom: 20px;">Book Chapters</h3>
+
+                <div class="paper-item">
+                    <div class="paper-title">Big Data Management on Wireless Sensor Networks</div>
+                    <div class="paper-details">C.-C. Hung, C.-C. Hsieh, <em>Big Data Analytics for Sensor-Network Collected Intelligence</em>, Academic Press, 2017</div>
+                </div>
+
+                <div class="paper-item">
+                    <div class="paper-title">Clustering Clues of Trajectories for Discovering Frequent Movement Behaviors</div>
+                    <div class="paper-details">C.-C. Hung, L.-Y. Wei, W.-C. Peng, <em>Behavior Computing: Modeling, Analysis, Mining and Decision</em>, Springer-Verlag New York, 2012</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="awards" class="tab-content">
+            <div class="awards-section">
+                <h2>Recent Honors and Awards</h2>
+                <div class="award-item">
+                    <div class="award-icon">🏆</div>
+                    <div class="award-text">
+                        <div><strong>Best Paper Award</strong></div>
+                        <div>28th International Conference on Technologies and Applications of Artificial Intelligence</div>
+                        <div style="font-style: italic; margin-top: 5px;">Causality-Driven Patent Valuation: Integrating Domain Knowledge and Language Models</div>
+                    </div>
+                    <div class="award-year">2024</div>
+                </div>
+                <div class="award-item">
+                    <div class="award-icon">🏆</div>
+                    <div class="award-text">
+                        <div><strong>Best Paper Award</strong></div>
+                        <div>14th International Conference on Frontier Computing</div>
+                        <div style="font-style: italic; margin-top: 5px;">Using Local Gradient Compensation in Federated Learning</div>
+                    </div>
+                    <div class="award-year">2024</div>
+                </div>
+                <div class="award-item">
+                    <div class="award-icon">🥇</div>
+                    <div class="award-text">
+                        <div><strong>Gold Award in Artificial Intelligence</strong></div>
+                        <div>14th International Conference on Frontier Computing</div>
+                        <div style="font-style: italic; margin-top: 5px;">Portfolio Optimization Using No-Regret Online Learning</div>
+                    </div>
+                    <div class="award-year">2024</div>
+                </div>
+                <div class="award-item">
+                    <div class="award-icon">🏅</div>
+                    <div class="award-text">
+                        <div><strong>Excellent Paper Award</strong></div>
+                        <div>28th International Conference on Technologies and Applications of Artificial Intelligence</div>
+                        <div style="font-style: italic; margin-top: 5px;">Air Pollution Source Tracing Framework</div>
+                    </div>
+                    <div class="award-year">2023</div>
+                </div>
+
+                <h2 style="margin-top: 40px;">Professional Certifications</h2>
+                <div class="experience-item">
+                    <div class="position">Oracle Cloud Infrastructure 2021 Certificated Architect Associate</div>
+                    <div class="duration">2021/12</div>
+                </div>
+                <div class="experience-item">
+                    <div class="position">AWS Accredited Academy Instructors</div>
+                    <div class="duration">2018/09</div>
+                </div>
+                <div class="experience-item">
+                    <div class="position">AWS Certificated Cloud Practitioner</div>
+                    <div class="duration">2018/07</div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>&copy; 2025 Dr. Chih-Chieh Hung. All rights reserved.</p>
+            <p>Last updated: June 2025</p>
+        </footer>
+    </div>
+
+    <script>
+        function showTab(event, tabName) {
+    // Hide all tab contents
+    const tabContents = document.querySelectorAll('.tab-content');
+    tabContents.forEach(content => content.classList.remove('active'));
+
+    // Remove active class from all buttons
+    const tabButtons = document.querySelectorAll('.tab-button');
+    tabButtons.forEach(button => button.classList.remove('active'));
+
+    // Show selected tab content
+    document.getElementById(tabName).classList.add('active');
+
+    // Add active class to clicked button
+    event.target.classList.add('active');
+}
+
+// Add smooth scrolling and entrance animations
+document.addEventListener('DOMContentLoaded', function() {
+    const sections = document.querySelectorAll('.section, .awards-section');
+    
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('in-view');
+                entry.target.style.opacity = '1';
+                entry.target.style.transform = 'translateY(0)';
+                observer.unobserve(entry.target); // Stop observing once in view
+            }
+        });
+    }, { threshold: 0.1 });
+
+    sections.forEach(section => {
+        section.style.opacity = '0';
+        section.style.transform = 'translateY(20px)';
+        section.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+        observer.observe(section);
+    });
+    showTab(new Event('click'), 'overview');
+});
+
+    </script>    
+</body>
+</html>
