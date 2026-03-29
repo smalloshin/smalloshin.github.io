@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "deploy-agent-api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "deploy-agent/apps/api"],
+      "port": 4000
+    },
+    {
+      "name": "deploy-agent-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "deploy-agent/apps/web"],
+      "port": 3000
+    }
+  ]
+}

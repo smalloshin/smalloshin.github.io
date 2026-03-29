@@ -1,0 +1,41 @@
+steps:
+  # Build API image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/deploy-agent/api:${SHORT_SHA}', '-f', 'apps/api/Dockerfile', '.']
+
+  # Build Web image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/deploy-agent/web:${SHORT_SHA}', '-f', 'apps/web/Dockerfile', '.']
+
+  # Push API image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/deploy-agent/api:${SHORT_SHA}']
+
+  # Push Web image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/deploy-agent/web:${SHORT_SHA}']
+
+  # Deploy API to Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'deploy-agent-api'
+      - '--image'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/deploy-agent/api:${SHORT_SHA}'
+      - '--region'
+      - '${_REGION}'
+      - '--platform'
+      - 'managed'
+      - '--memory'
+      - '1Gi'
+      - '--cpu'
+      - '2'
+      - '--no-allow-unauthenticated'
+      - '--quiet'
+
+substitutions:
+  _REGION: asia-east1
+
+options:
+  logging: CLOUD_LOGGING_ONLY
