@@ -156,6 +156,62 @@ export async function createDeployment(
   return rowToDeployment(result.rows[0]);
 }
 
+export async function updateDeployment(
+  id: string,
+  updates: Partial<{
+    cloudRunService: string;
+    cloudRunUrl: string;
+    customDomain: string;
+    sslStatus: string;
+    healthStatus: string;
+    canaryResults: unknown;
+    gitPrUrl: string;
+    terraformConfig: string;
+    deployedAt: Date;
+  }>
+): Promise<Deployment> {
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  let idx = 1;
+
+  if (updates.cloudRunService !== undefined) { sets.push(`cloud_run_service = $${idx++}`); params.push(updates.cloudRunService); }
+  if (updates.cloudRunUrl !== undefined) { sets.push(`cloud_run_url = $${idx++}`); params.push(updates.cloudRunUrl); }
+  if (updates.customDomain !== undefined) { sets.push(`custom_domain = $${idx++}`); params.push(updates.customDomain); }
+  if (updates.sslStatus !== undefined) { sets.push(`ssl_status = $${idx++}`); params.push(updates.sslStatus); }
+  if (updates.healthStatus !== undefined) { sets.push(`health_status = $${idx++}`); params.push(updates.healthStatus); }
+  if (updates.canaryResults !== undefined) { sets.push(`canary_results = $${idx++}`); params.push(JSON.stringify(updates.canaryResults)); }
+  if (updates.gitPrUrl !== undefined) { sets.push(`git_pr_url = $${idx++}`); params.push(updates.gitPrUrl); }
+  if (updates.terraformConfig !== undefined) { sets.push(`terraform_config = $${idx++}`); params.push(updates.terraformConfig); }
+  if (updates.deployedAt !== undefined) { sets.push(`deployed_at = $${idx++}`); params.push(updates.deployedAt); }
+
+  if (sets.length === 0) {
+    const row = await getOne('SELECT * FROM deployments WHERE id = $1', [id]);
+    if (!row) throw new Error(`Deployment not found: ${id}`);
+    return rowToDeployment(row);
+  }
+
+  params.push(id);
+  const result = await query(
+    `UPDATE deployments SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
+    params
+  );
+  if (result.rows.length === 0) throw new Error(`Deployment not found: ${id}`);
+  return rowToDeployment(result.rows[0]);
+}
+
+export async function getDeploymentsByProject(projectId: string): Promise<Deployment[]> {
+  const result = await query(
+    'SELECT * FROM deployments WHERE project_id = $1 ORDER BY created_at DESC',
+    [projectId]
+  );
+  return result.rows.map(rowToDeployment);
+}
+
+export async function deleteProjectFromDb(projectId: string): Promise<void> {
+  // ON DELETE CASCADE handles scan_reports, reviews, deployments, state_transitions
+  await query('DELETE FROM projects WHERE id = $1', [projectId]);
+}
+
 async function logTransition(
   projectId: string,
   fromState: ProjectStatus | null,

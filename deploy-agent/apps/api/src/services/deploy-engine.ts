@@ -33,16 +33,15 @@ export async function buildAndPushImage(
   const imageUri = `${config.gcpRegion}-docker.pkg.dev/${config.gcpProject}/deploy-agent/${config.imageName}:${config.imageTag}`;
 
   try {
-    // Build with Cloud Build (sandboxed)
+    // Build with Cloud Build (sandboxed, global region for speed)
     await execFileAsync('gcloud', [
       'builds', 'submit',
       '--project', config.gcpProject,
-      '--region', config.gcpRegion,
       '--tag', imageUri,
       '--timeout', '600s',
       '--quiet',
       projectDir,
-    ], { timeout: 10 * 60 * 1000 });
+    ], { timeout: 10 * 60 * 1000, maxBuffer: 50 * 1024 * 1024 });
 
     return { success: true, imageUri, error: null };
   } catch (err) {
@@ -83,7 +82,7 @@ export async function deployToCloudRun(config: DeployConfig, imageUri: string): 
   }
 
   try {
-    const { stdout } = await execFileAsync('gcloud', args, { timeout: 5 * 60 * 1000 });
+    const { stdout } = await execFileAsync('gcloud', args, { timeout: 5 * 60 * 1000, maxBuffer: 50 * 1024 * 1024 });
     const result = JSON.parse(stdout);
     const serviceUrl = result.status?.url ?? null;
 
@@ -172,6 +171,54 @@ export async function rollbackService(
   }
 }
 
+export async function deleteDomainMapping(
+  gcpProject: string,
+  gcpRegion: string,
+  domain: string
+): Promise<void> {
+  try {
+    await execFileAsync('gcloud', [
+      'beta', 'run', 'domain-mappings', 'delete',
+      '--domain', domain,
+      '--project', gcpProject,
+      '--region', gcpRegion,
+      '--quiet',
+    ], { timeout: 60 * 1000 });
+    console.log(`  Deleted domain mapping: ${domain}`);
+  } catch (err) {
+    const msg = (err as Error).message;
+    if (msg.includes('not found') || msg.includes('NOT_FOUND')) {
+      console.log(`  Domain mapping ${domain} not found (already deleted)`);
+    } else {
+      console.error(`  Failed to delete domain mapping ${domain}:`, msg);
+    }
+  }
+}
+
+export async function deleteContainerImage(
+  gcpProject: string,
+  gcpRegion: string,
+  imageName: string
+): Promise<void> {
+  const imageUri = `${gcpRegion}-docker.pkg.dev/${gcpProject}/deploy-agent/${imageName}`;
+  try {
+    await execFileAsync('gcloud', [
+      'artifacts', 'docker', 'images', 'delete', imageUri,
+      '--project', gcpProject,
+      '--delete-tags',
+      '--quiet',
+    ], { timeout: 60 * 1000 });
+    console.log(`  Deleted container image: ${imageUri}`);
+  } catch (err) {
+    const msg = (err as Error).message;
+    if (msg.includes('not found') || msg.includes('NOT_FOUND')) {
+      console.log(`  Image ${imageUri} not found (already deleted)`);
+    } else {
+      console.error(`  Failed to delete image ${imageUri}:`, msg);
+    }
+  }
+}
+
 export async function setupCustomDomain(
   gcpProject: string,
   gcpRegion: string,
@@ -180,13 +227,13 @@ export async function setupCustomDomain(
 ): Promise<{ success: boolean; error: string | null }> {
   try {
     await execFileAsync('gcloud', [
-      'run', 'domain-mappings', 'create',
+      'beta', 'run', 'domain-mappings', 'create',
       '--service', serviceName,
       '--domain', domain,
       '--project', gcpProject,
       '--region', gcpRegion,
       '--quiet',
-    ], { timeout: 60 * 1000 });
+    ], { timeout: 120 * 1000 });
 
     return { success: true, error: null };
   } catch (err) {

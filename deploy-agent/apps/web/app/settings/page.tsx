@@ -1,35 +1,125 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+
+interface Settings {
+  gcpProject: string;
+  gcpRegion: string;
+  artifactRegistry: string;
+  baseDomain: string;
+  cloudflareToken: string;
+  cloudflareZoneId: string;
+  cloudflareZoneName: string;
+  slackWebhookUrl: string;
+  anthropicApiKey: string;
+  githubToken: string;
+}
+
+const EMPTY: Settings = {
+  gcpProject: '',
+  gcpRegion: '',
+  artifactRegistry: '',
+  baseDomain: '',
+  cloudflareToken: '',
+  cloudflareZoneId: '',
+  cloudflareZoneName: '',
+  slackWebhookUrl: '',
+  anthropicApiKey: '',
+  githubToken: '',
+};
+
 export default function SettingsPage() {
+  const [settings, setSettings] = useState<Settings>(EMPTY);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    fetch(`${API}/api/settings`)
+      .then((r) => r.json())
+      .then((data) => { setSettings(data.settings); setLoading(false); })
+      .catch(() => { setLoading(false); });
+  }, []);
+
+  const update = (key: keyof Settings, value: string) => {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`${API}/api/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessage({ type: 'success', text: 'Settings saved successfully.' });
+      } else {
+        setMessage({ type: 'error', text: data.message ?? 'Failed to save settings.' });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: (err as Error).message });
+    }
+    setSaving(false);
+  };
+
+  if (loading) {
+    return (
+      <div>
+        <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 24 }}>Settings</h2>
+        <div style={{ color: 'var(--text-secondary)' }}>Loading settings...</div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 24 }}>Settings</h2>
 
       <Section title="GCP Configuration">
-        <Field label="GCP Project ID" placeholder="my-gcp-project" />
-        <Field label="Region" placeholder="asia-east1" />
-        <Field label="Artifact Registry" placeholder="asia-east1-docker.pkg.dev/project/repo" />
+        <Field label="GCP Project ID" placeholder="my-gcp-project" value={settings.gcpProject} onChange={(v) => update('gcpProject', v)} />
+        <Field label="Region" placeholder="asia-east1" value={settings.gcpRegion} onChange={(v) => update('gcpRegion', v)} />
+        <Field label="Artifact Registry" placeholder="asia-east1-docker.pkg.dev/project/repo" value={settings.artifactRegistry} onChange={(v) => update('artifactRegistry', v)} />
       </Section>
 
       <Section title="Domain Management">
-        <Field label="Base Domain" placeholder="deploy.yourdomain.com" />
+        <Field label="Base Domain" placeholder="deploy.yourdomain.com" value={settings.baseDomain} onChange={(v) => update('baseDomain', v)} />
+        <Field label="Cloudflare Zone ID" placeholder="zone-id" value={settings.cloudflareZoneId} onChange={(v) => update('cloudflareZoneId', v)} />
+        <Field label="Cloudflare Zone Name" placeholder="yourdomain.com" value={settings.cloudflareZoneName} onChange={(v) => update('cloudflareZoneName', v)} />
+        <Field label="Cloudflare API Token" placeholder="token" type="password" value={settings.cloudflareToken} onChange={(v) => update('cloudflareToken', v)} />
         <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 4 }}>
-          Projects will be deployed to [slug].deploy.yourdomain.com
+          Projects will be deployed to [slug].yourdomain.com
         </p>
       </Section>
 
       <Section title="Notifications">
-        <Field label="Slack Webhook URL" placeholder="https://hooks.slack.com/..." />
+        <Field label="Slack Webhook URL" placeholder="https://hooks.slack.com/..." value={settings.slackWebhookUrl} onChange={(v) => update('slackWebhookUrl', v)} />
       </Section>
 
       <Section title="API Keys">
-        <Field label="Anthropic API Key" placeholder="sk-ant-..." type="password" />
-        <Field label="GitHub Token" placeholder="ghp_..." type="password" />
+        <Field label="Anthropic API Key" placeholder="sk-ant-..." type="password" value={settings.anthropicApiKey} onChange={(v) => update('anthropicApiKey', v)} />
+        <Field label="GitHub Token" placeholder="ghp_..." type="password" value={settings.githubToken} onChange={(v) => update('githubToken', v)} />
       </Section>
 
+      {message && (
+        <div style={{
+          padding: '8px 12px', marginBottom: 12, borderRadius: 6, fontSize: 13,
+          background: message.type === 'success' ? 'rgba(63,185,80,0.1)' : 'rgba(248,81,73,0.1)',
+          color: message.type === 'success' ? 'var(--status-success)' : 'var(--status-critical)',
+          border: `1px solid ${message.type === 'success' ? 'var(--status-success)' : 'var(--status-critical)'}`,
+        }}>
+          {message.text}
+        </div>
+      )}
+
       <div style={{ marginTop: 24 }}>
-        <button className="btn btn-primary" onClick={() => alert('Settings save coming soon')}>
-          Save Settings
+        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+          {saving ? 'Saving...' : 'Save Settings'}
         </button>
       </div>
     </div>
@@ -51,7 +141,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({ label, placeholder, type = 'text' }: { label: string; placeholder: string; type?: string }) {
+function Field({ label, placeholder, type = 'text', value, onChange }: {
+  label: string; placeholder: string; type?: string; value: string; onChange: (v: string) => void;
+}) {
   return (
     <div style={{ marginBottom: 12 }}>
       <label style={{ display: 'block', fontSize: 13, marginBottom: 4, color: 'var(--text-secondary)' }}>
@@ -60,6 +152,8 @@ function Field({ label, placeholder, type = 'text' }: { label: string; placehold
       <input
         type={type}
         placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
         style={{
           width: '100%', maxWidth: 400, padding: '8px 12px',
           background: 'var(--bg-primary)', border: '1px solid var(--border)',

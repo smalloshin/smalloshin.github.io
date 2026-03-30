@@ -38,7 +38,7 @@ export function detectProject(projectDir: string): DetectionResult {
       else result.packageManager = 'npm';
 
       // Detect framework
-      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+      const deps: Record<string, string> = { ...(pkg.dependencies as Record<string, string> ?? {}), ...(pkg.devDependencies as Record<string, string> ?? {}) };
       if (deps['next']) { result.framework = 'nextjs'; result.port = 3000; }
       else if (deps['nuxt']) { result.framework = 'nuxt'; result.port = 3000; }
       else if (deps['@sveltejs/kit']) { result.framework = 'sveltekit'; result.port = 5173; }
@@ -52,8 +52,8 @@ export function detectProject(projectDir: string): DetectionResult {
       }
 
       // Detect entrypoint
-      if (pkg.main) result.entrypoint = pkg.main;
-      else if (pkg.scripts?.start) result.entrypoint = 'npm start';
+      if (pkg.main) result.entrypoint = String(pkg.main);
+      else if ((pkg.scripts as Record<string, string> | undefined)?.start) result.entrypoint = 'npm start';
     }
 
     // Detect env vars from .env.example

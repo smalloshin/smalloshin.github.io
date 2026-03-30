@@ -7,7 +7,12 @@ import {
   transitionProject,
   createScanReport,
   getLatestScanReport,
+  getDeploymentsByProject,
+  deleteProjectFromDb,
 } from '../services/orchestrator';
+import { runPipeline } from '../services/pipeline-worker';
+import { deleteService, deleteDomainMapping, deleteContainerImage } from '../services/deploy-engine';
+import { deleteCname } from '../services/dns-manager';
 
 const submitSchema = z.object({
   name: z.string().min(1).max(255),
@@ -50,8 +55,14 @@ export async function projectRoutes(app: FastifyInstance) {
     await transitionProject(project.id, 'scanning', 'system', { trigger: 'auto' });
     const scanReport = await createScanReport(project.id);
 
-    // TODO: Dispatch worker job for scanning pipeline
-    // For now, the scan will be triggered via the worker endpoint
+    // Dispatch pipeline worker asynchronously (non-blocking)
+    // sourceUrl is the local path or git URL to scan
+    const projectDir = body.sourceUrl ?? '';
+    if (projectDir) {
+      runPipeline(project.id, projectDir).catch((err) => {
+        console.error(`[Pipeline] Async dispatch failed for ${project.id}:`, (err as Error).message);
+      });
+    }
 
     return reply.status(201).send({ project: { ...project, status: 'scanning' }, scanReport });
   });
@@ -74,5 +85,75 @@ export async function projectRoutes(app: FastifyInstance) {
 
     const updated = await transitionProject(project.id, 'submitted', 'user', { action: 'resubmit' });
     return { project: updated };
+  });
+
+  // Delete project and tear down all GCP resources
+  app.delete<{ Params: { id: string } }>('/api/projects/:id', async (request, reply) => {
+    const project = await getProject(request.params.id);
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    const gcpProject = project.config?.gcpProject || process.env.GCP_PROJECT || '';
+    const gcpRegion = project.config?.gcpRegion || process.env.GCP_REGION || 'asia-east1';
+
+    const teardownLog: { step: string; status: string; error?: string }[] = [];
+
+    // 1. Find deployments to know what GCP resources to clean up
+    const deployments = await getDeploymentsByProject(project.id);
+
+    for (const deploy of deployments) {
+      // 2. Delete Cloud Run service
+      if (deploy.cloudRunService && gcpProject) {
+        try {
+          await deleteService(gcpProject, gcpRegion, deploy.cloudRunService);
+          teardownLog.push({ step: `Delete Cloud Run service: ${deploy.cloudRunService}`, status: 'ok' });
+        } catch (err) {
+          teardownLog.push({ step: `Delete Cloud Run service: ${deploy.cloudRunService}`, status: 'error', error: (err as Error).message });
+        }
+      }
+
+      // 3. Delete domain mapping & Cloudflare DNS
+      if (deploy.customDomain && gcpProject) {
+        try {
+          await deleteDomainMapping(gcpProject, gcpRegion, deploy.customDomain);
+          teardownLog.push({ step: `Delete domain mapping: ${deploy.customDomain}`, status: 'ok' });
+        } catch (err) {
+          teardownLog.push({ step: `Delete domain mapping: ${deploy.customDomain}`, status: 'error', error: (err as Error).message });
+        }
+
+        // Delete Cloudflare DNS record
+        const cfToken = process.env.CLOUDFLARE_TOKEN || '';
+        const cfZoneId = process.env.CLOUDFLARE_ZONE_ID || '';
+        const cfZoneName = process.env.CLOUDFLARE_ZONE_NAME || '';
+
+        if (cfToken && cfZoneId && cfZoneName) {
+          // Extract subdomain from custom_domain (e.g. "kol-studio.punwave.com" → "kol-studio")
+          const subdomain = deploy.customDomain.replace(`.${cfZoneName}`, '');
+          try {
+            const result = await deleteCname({ cloudflareToken: cfToken, zoneId: cfZoneId, subdomain, zoneName: cfZoneName });
+            teardownLog.push({ step: `Delete DNS: ${deploy.customDomain}`, status: result.success ? 'ok' : 'error', error: result.error ?? undefined });
+          } catch (err) {
+            teardownLog.push({ step: `Delete DNS: ${deploy.customDomain}`, status: 'error', error: (err as Error).message });
+          }
+        }
+      }
+    }
+
+    // 4. Delete container images from Artifact Registry
+    if (gcpProject && gcpRegion) {
+      try {
+        await deleteContainerImage(gcpProject, gcpRegion, project.slug);
+        teardownLog.push({ step: `Delete container image: ${project.slug}`, status: 'ok' });
+      } catch (err) {
+        teardownLog.push({ step: `Delete container image: ${project.slug}`, status: 'error', error: (err as Error).message });
+      }
+    }
+
+    // 5. Delete from database (CASCADE deletes scan_reports, reviews, deployments, state_transitions)
+    await deleteProjectFromDb(project.id);
+    teardownLog.push({ step: 'Delete database records', status: 'ok' });
+
+    console.log(`[Teardown] Project "${project.name}" (${project.id}) deleted:`, JSON.stringify(teardownLog));
+
+    return { success: true, project: { id: project.id, name: project.name }, teardownLog };
   });
 }

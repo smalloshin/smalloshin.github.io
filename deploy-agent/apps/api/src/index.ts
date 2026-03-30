@@ -5,6 +5,7 @@ import { projectRoutes } from './routes/projects';
 import { reviewRoutes } from './routes/reviews';
 import { deployRoutes } from './routes/deploys';
 import { mcpRoutes } from './routes/mcp';
+import { settingsRoutes } from './routes/settings';
 
 const app = Fastify({
   logger: {
@@ -33,9 +34,10 @@ await app.register(projectRoutes);
 await app.register(reviewRoutes);
 await app.register(deployRoutes);
 await app.register(mcpRoutes);
+await app.register(settingsRoutes);
 
 // Global error handler
-app.setErrorHandler((error, request, reply) => {
+app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
   app.log.error({ err: error, url: request.url, method: request.method }, 'Request error');
 
   if (error.name === 'ZodError') {

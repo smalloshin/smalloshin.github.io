@@ -109,6 +109,7 @@ async function main() {
       applied: true,
       explanation: fix.explanation,
       diff: `- ${fix.originalCode.slice(0, 50)}...\n+ ${fix.fixedCode.slice(0, 50)}...`,
+      verificationPassed: null,
     })),
     costEstimate,
   );

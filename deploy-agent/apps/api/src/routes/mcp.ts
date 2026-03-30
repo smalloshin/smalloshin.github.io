@@ -9,6 +9,7 @@ import {
   createDeployment,
 } from '../services/orchestrator';
 import { query } from '../db/index';
+import { checkSslStatus } from '../services/ssl-monitor';
 
 // MCP Protocol handler - implements Model Context Protocol for AI tool integration
 // This enables OpenClaw, Claude Code, and other MCP-compatible tools to interact with the deploy agent
@@ -184,7 +185,7 @@ async function handleToolCall(call: MCPToolCall): Promise<MCPToolResult> {
 
       case 'get_deploy_status': {
         const result = await query(
-          `SELECT d.*, p.name as project_name FROM deployments d
+          `SELECT d.*, p.name as project_name, p.config, p.status as project_status FROM deployments d
            JOIN projects p ON d.project_id = p.id
            WHERE d.project_id = $1
            ORDER BY d.created_at DESC LIMIT 1`,
@@ -192,7 +193,39 @@ async function handleToolCall(call: MCPToolCall): Promise<MCPToolResult> {
         );
         if (result.rows.length === 0) return error('No deployment found for this project');
         const d = result.rows[0];
-        return text(`Deploy: ${d.project_name}\nURL: ${d.cloud_run_url ?? 'pending'}\nDomain: ${d.custom_domain ?? 'none'}\nSSL: ${d.ssl_status ?? 'pending'}\nHealth: ${d.health_status}`);
+
+        let sslInfo = `SSL: ${d.ssl_status ?? 'pending'}`;
+
+        // If custom domain exists and SSL not yet active, check live status
+        if (d.custom_domain && d.ssl_status !== 'active') {
+          const config = typeof d.config === 'string' ? JSON.parse(d.config) : d.config;
+          const gcpProject = config?.gcpProject || process.env.GCP_PROJECT || '';
+          const gcpRegion = config?.gcpRegion || process.env.GCP_REGION || '';
+
+          if (gcpProject && gcpRegion) {
+            const liveStatus = await checkSslStatus(gcpProject, gcpRegion, d.custom_domain as string);
+            if (liveStatus.allReady) {
+              sslInfo = 'SSL: ✅ active (all conditions True, certificate serving traffic)';
+            } else {
+              const pending = liveStatus.conditions
+                .filter((c) => c.status !== 'True')
+                .map((c) => `${c.type}=${c.status}${c.reason ? ` (${c.reason})` : ''}`)
+                .join(', ');
+              sslInfo = `SSL: ⏳ provisioning — pending: ${pending || 'checking...'}`;
+            }
+          }
+        } else if (d.ssl_status === 'active') {
+          sslInfo = 'SSL: ✅ active (certificate serving traffic)';
+        }
+
+        return text(
+          `Deploy: ${d.project_name}\n` +
+          `Status: ${d.project_status}\n` +
+          `URL: ${d.cloud_run_url ?? 'pending'}\n` +
+          `Domain: ${d.custom_domain ?? 'none'}\n` +
+          `${sslInfo}\n` +
+          `Health: ${d.health_status}`
+        );
       }
 
       case 'rollback_deploy': {
