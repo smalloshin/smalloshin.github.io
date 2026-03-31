@@ -120,13 +120,30 @@ export async function buildAndPushImage(
       if (!statusRes.ok) {
         throw new Error(`Cloud Build poll failed (${statusRes.status})`);
       }
-      const status = await statusRes.json() as { status: string; statusDetail?: string };
+      const status = await statusRes.json() as { status: string; statusDetail?: string; logUrl?: string; results?: { buildStepOutputs?: string[] }; steps?: Array<{ status: string; args?: string[] }> };
 
       if (status.status === 'SUCCESS') {
         return { success: true, imageUri, error: null };
       }
       if (status.status === 'FAILURE' || status.status === 'INTERNAL_ERROR' || status.status === 'TIMEOUT' || status.status === 'CANCELLED') {
-        throw new Error(`Cloud Build ${status.status}: ${status.statusDetail ?? 'no details'}`);
+        // Try to fetch build log for detailed error
+        let detailMsg = status.statusDetail ?? 'no details';
+        try {
+          const logUrl = `https://cloudbuild.googleapis.com/v1/projects/${config.gcpProject}/builds/${buildId}`;
+          const logRes = await gcpFetch(logUrl);
+          if (logRes.ok) {
+            const logData = await logRes.json() as { logUrl?: string; failureInfo?: { detail?: string; type?: string }; statusDetail?: string };
+            if (logData.failureInfo?.detail) {
+              detailMsg = logData.failureInfo.detail;
+            } else if (logData.statusDetail) {
+              detailMsg = logData.statusDetail;
+            }
+            if (logData.logUrl) {
+              detailMsg += ` | Logs: ${logData.logUrl}`;
+            }
+          }
+        } catch { /* ignore log fetch errors */ }
+        throw new Error(`Cloud Build ${status.status}: ${detailMsg}`);
       }
       console.log(`[Deploy]   Cloud Build status: ${status.status}`);
     }

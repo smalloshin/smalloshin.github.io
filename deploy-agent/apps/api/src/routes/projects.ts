@@ -199,12 +199,13 @@ export async function projectRoutes(app: FastifyInstance) {
     await writeFile(archivePath, fileBuffer);
 
     // Extract based on file type
+    const lowerName = fileName.toLowerCase();
     try {
-      if (fileName.endsWith('.zip')) {
+      if (lowerName.endsWith('.zip')) {
         await execFileAsync('unzip', ['-o', archivePath, '-d', extractDir], { timeout: 60000 });
-      } else if (fileName.endsWith('.tar.gz') || fileName.endsWith('.tgz')) {
+      } else if (lowerName.endsWith('.tar.gz') || lowerName.endsWith('.tgz')) {
         await execFileAsync('tar', ['-xzf', archivePath, '-C', extractDir], { timeout: 60000 });
-      } else if (fileName.endsWith('.tar')) {
+      } else if (lowerName.endsWith('.tar')) {
         await execFileAsync('tar', ['-xf', archivePath, '-C', extractDir], { timeout: 60000 });
       } else {
         return reply.status(400).send({ error: 'Unsupported file type. Please upload .zip, .tar.gz, or .tar' });
@@ -213,12 +214,58 @@ export async function projectRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: `Failed to extract archive: ${(err as Error).message}` });
     }
 
-    // Check if archive had a single root directory — if so, use that as project dir
+    // ── Defensive cleanup: remove macOS/OS junk directories ──
+    const { rmSync, existsSync, statSync, readdirSync } = await import('node:fs');
+    const junkDirs = ['__MACOSX', '.DS_Store', '__pycache__', '.Spotlight-V100', '.Trashes'];
+    for (const junk of junkDirs) {
+      const junkPath = join(extractDir, junk);
+      try { rmSync(junkPath, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+    // Also recursively remove .DS_Store files inside subdirectories
+    const removeDsStore = (dir: string) => {
+      try {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          const full = join(dir, entry.name);
+          if (entry.name === '.DS_Store') { try { rmSync(full, { force: true }); } catch {} }
+          else if (entry.isDirectory()) removeDsStore(full);
+        }
+      } catch { /* ignore */ }
+    };
+    removeDsStore(extractDir);
+
+    // ── Determine projectDir: find the real root with source code ──
     const { stdout } = await execFileAsync('ls', [extractDir]);
-    const entries = stdout.trim().split('\n').filter(Boolean);
-    const projectDir = entries.length === 1
-      ? join(extractDir, entries[0])
-      : extractDir;
+    const entries = stdout.trim().split('\n').filter(e => e && !junkDirs.includes(e));
+    let projectDir: string;
+
+    if (entries.length === 1 && existsSync(join(extractDir, entries[0])) &&
+        statSync(join(extractDir, entries[0])).isDirectory()) {
+      // Single directory inside archive — use it as root
+      projectDir = join(extractDir, entries[0]);
+    } else {
+      // Files are directly in extractDir
+      projectDir = extractDir;
+    }
+
+    // ── Validate: must have a Dockerfile or package.json ──
+    const hasDockerfile = existsSync(join(projectDir, 'Dockerfile'));
+    const hasPackageJson = existsSync(join(projectDir, 'package.json'));
+    if (!hasDockerfile && !hasPackageJson) {
+      // Maybe nested one level deeper? Try to find Dockerfile
+      const subdirs = readdirSync(projectDir, { withFileTypes: true })
+        .filter(d => d.isDirectory())
+        .map(d => d.name);
+      const subWithDockerfile = subdirs.find(d => existsSync(join(projectDir, d, 'Dockerfile')));
+      if (subWithDockerfile) {
+        console.log(`[Upload] Dockerfile found in subdirectory: ${subWithDockerfile}, adjusting projectDir`);
+        projectDir = join(projectDir, subWithDockerfile);
+      } else {
+        console.warn(`[Upload] No Dockerfile or package.json found in extracted archive at: ${projectDir}`);
+        console.warn(`[Upload] Directory contents: ${readdirSync(projectDir).join(', ')}`);
+        // Don't block — the build step will give a clearer error
+      }
+    }
+    console.log(`[Upload] Final projectDir: ${projectDir}, hasDockerfile: ${existsSync(join(projectDir, 'Dockerfile'))}, entries: [${entries.join(', ')}]`);
 
     // Upload source to GCS for durable storage (Cloud Run /tmp is ephemeral)
     let gcsSourceUri = '';
