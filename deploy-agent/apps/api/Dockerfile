@@ -10,7 +10,7 @@ WORKDIR /app
 
 # Install security scanning tools (semgrep + trivy)
 RUN apk add --no-cache python3 py3-pip curl tar gzip && \
-    pip3 install --break-system-packages semgrep && \
+    pip3 install --break-system-packages semgrep packaging && \
     curl -sL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz && \
     tar xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy && \
     chmod +x /usr/local/bin/trivy && \
