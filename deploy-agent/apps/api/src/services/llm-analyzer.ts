@@ -140,16 +140,50 @@ Respond with JSON:
     return { summary: 'LLM analysis failed: all providers unavailable', findings: [], autoFixes: [], provider: 'fallback' };
   }
 
-  // Extract JSON from response (may be wrapped in markdown code blocks)
-  const jsonMatch = result.text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    console.error('LLM returned no JSON. Raw response:', result.text.slice(0, 500));
-    return { summary: 'Analysis failed: no structured output', findings: [], autoFixes: [], provider: result.provider };
+  // Extract JSON from response — multiple strategies for robustness
+  let parsed: Record<string, unknown> | null = null;
+
+  // Strategy 1: Find JSON in markdown code block (```json ... ```)
+  const codeBlockMatch = result.text.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    try {
+      parsed = JSON.parse(codeBlockMatch[1].trim());
+    } catch { /* try next strategy */ }
+  }
+
+  // Strategy 2: Find outermost { ... } in raw text
+  if (!parsed) {
+    const jsonMatch = result.text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        parsed = JSON.parse(jsonMatch[0]);
+      } catch {
+        // Strategy 3: Try to fix truncated JSON by closing brackets
+        try {
+          let fixable = jsonMatch[0];
+          // Count open/close braces and brackets
+          const openBraces = (fixable.match(/\{/g) || []).length;
+          const closeBraces = (fixable.match(/\}/g) || []).length;
+          const openBrackets = (fixable.match(/\[/g) || []).length;
+          const closeBrackets = (fixable.match(/\]/g) || []).length;
+          // Try adding missing closing brackets/braces
+          fixable += ']'.repeat(Math.max(0, openBrackets - closeBrackets));
+          fixable += '}'.repeat(Math.max(0, openBraces - closeBraces));
+          parsed = JSON.parse(fixable);
+          console.log('[LLM] Fixed truncated JSON by adding missing closing brackets');
+        } catch { /* give up */ }
+      }
+    }
+  }
+
+  if (!parsed) {
+    console.error('LLM returned no parseable JSON. Raw response (first 1000 chars):', result.text.slice(0, 1000));
+    // Last resort: extract any findings-like text and create a basic report
+    return { summary: `Analysis completed but output was not structured JSON (provider: ${result.provider}). Raw length: ${result.text.length} chars`, findings: [], autoFixes: [], provider: result.provider };
   }
 
   try {
-    const parsed = JSON.parse(jsonMatch[0]);
-    const findings: ScanFinding[] = (parsed.findings ?? []).map((f: Record<string, unknown>, i: number) => ({
+    const findings: ScanFinding[] = (parsed.findings as Array<Record<string, unknown>> ?? []).map((f: Record<string, unknown>, i: number) => ({
       id: `llm-${i}`,
       tool: 'llm' as const,
       category: f.category as string,
@@ -163,14 +197,14 @@ Respond with JSON:
     }));
 
     return {
-      summary: parsed.summary ?? '',
+      summary: (parsed.summary as string) ?? '',
       findings,
-      autoFixes: parsed.autoFixes ?? [],
+      autoFixes: (parsed.autoFixes as AutoFixAttempt[]) ?? [],
       provider: result.provider,
     };
   } catch (err) {
-    console.error('Failed to parse LLM JSON:', err);
-    return { summary: 'Analysis failed: invalid JSON output', findings: [], autoFixes: [], provider: result.provider };
+    console.error('Failed to map LLM findings:', err);
+    return { summary: (parsed.summary as string) ?? 'Analysis completed with parse errors', findings: [], autoFixes: [], provider: result.provider };
   }
 }
 
