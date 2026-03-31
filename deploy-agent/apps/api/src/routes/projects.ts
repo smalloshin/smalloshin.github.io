@@ -1,5 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { gcpFetch } from '../services/gcp-auth';
 import {
   createProject,
   listProjects,
@@ -13,6 +19,59 @@ import {
 import { runPipeline } from '../services/pipeline-worker';
 import { deleteService, deleteDomainMapping, deleteContainerImage } from '../services/deploy-engine';
 import { deleteCname } from '../services/dns-manager';
+
+const execFileAsync = promisify(execFile);
+
+// Parse "KEY=VALUE\nKEY2=VALUE2" format into a Record
+function parseEnvVarsText(text: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!text.trim()) return result;
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const val = trimmed.slice(eqIdx + 1).trim();
+    if (key) result[key] = val;
+  }
+  return result;
+}
+
+// Upload source tarball to GCS for durable storage (Cloud Run /tmp is ephemeral)
+async function uploadSourceToGcs(
+  projectSlug: string,
+  projectDir: string,
+): Promise<string> {
+  const gcpProject = process.env.GCP_PROJECT || 'wave-deploy-agent';
+  const bucket = `${gcpProject}_cloudbuild`;
+  const objectName = `sources/${projectSlug}-${Date.now()}.tgz`;
+  const tarballPath = join(tmpdir(), `${projectSlug}-source-${Date.now()}.tgz`);
+
+  // Create tarball from project directory
+  await execFileAsync('tar', ['-czf', tarballPath, '-C', projectDir, '.'], { timeout: 60_000 });
+
+  // Upload to GCS
+  const { readFileSync, unlinkSync } = await import('node:fs');
+  const tarball = readFileSync(tarballPath);
+  const uploadUrl = `https://storage.googleapis.com/upload/storage/v1/b/${bucket}/o?uploadType=media&name=${encodeURIComponent(objectName)}`;
+  const res = await gcpFetch(uploadUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/gzip' },
+    body: tarball,
+  });
+
+  try { unlinkSync(tarballPath); } catch { /* ignore */ }
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`GCS upload failed (${res.status}): ${err}`);
+  }
+
+  const gcsUri = `gs://${bucket}/${objectName}`;
+  console.log(`[Upload] Source uploaded to ${gcsUri}`);
+  return gcsUri;
+}
 
 const submitSchema = z.object({
   name: z.string().min(1).max(255),
@@ -67,6 +126,136 @@ export async function projectRoutes(app: FastifyInstance) {
     return reply.status(201).send({ project: { ...project, status: 'scanning' }, scanReport });
   });
 
+  // Submit new project via file upload (multipart form)
+  app.post('/api/projects/upload', async (request, reply) => {
+    const parts = request.parts();
+
+    let name = '';
+    let customDomain = '';
+    let allowUnauthenticated = false;
+    let sourceType: 'upload' | 'git' = 'upload';
+    let gitUrl = '';
+    let envVarsRaw = '';
+    let fileBuffer: Buffer | null = null;
+    let fileName = '';
+
+    for await (const part of parts) {
+      if (part.type === 'field') {
+        const val = String(part.value);
+        if (part.fieldname === 'name') name = val;
+        else if (part.fieldname === 'customDomain') customDomain = val;
+        else if (part.fieldname === 'allowUnauthenticated') allowUnauthenticated = val === 'true';
+        else if (part.fieldname === 'sourceType') sourceType = val as 'upload' | 'git';
+        else if (part.fieldname === 'gitUrl') gitUrl = val;
+        else if (part.fieldname === 'envVars') envVarsRaw = val;
+      } else if (part.type === 'file' && part.fieldname === 'file') {
+        fileName = part.filename;
+        fileBuffer = await part.toBuffer();
+      }
+    }
+
+    if (!name.trim()) {
+      return reply.status(400).send({ error: 'Project name is required' });
+    }
+
+    // If git source type, handle like before
+    if (sourceType === 'git') {
+      if (!gitUrl.trim()) {
+        return reply.status(400).send({ error: 'Git URL is required' });
+      }
+      const userEnvVars = parseEnvVarsText(envVarsRaw);
+      const project = await createProject({
+        name: name.trim(),
+        sourceType: 'git',
+        sourceUrl: gitUrl.trim(),
+        config: {
+          deployTarget: 'cloud_run',
+          customDomain: customDomain.trim() || undefined,
+          allowUnauthenticated,
+          envVars: Object.keys(userEnvVars).length > 0 ? userEnvVars : undefined,
+        },
+      });
+      await transitionProject(project.id, 'scanning', 'system', { trigger: 'auto' });
+      const scanReport = await createScanReport(project.id);
+      runPipeline(project.id, gitUrl.trim()).catch((err) => {
+        console.error(`[Pipeline] Async dispatch failed for ${project.id}:`, (err as Error).message);
+      });
+      return reply.status(201).send({ project: { ...project, status: 'scanning' }, scanReport });
+    }
+
+    // Upload source type — need a file
+    if (!fileBuffer || !fileName) {
+      return reply.status(400).send({ error: 'File upload is required for upload source type' });
+    }
+
+    // Save uploaded file to temp dir and extract
+    const projectSlug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+    const uploadDir = join(tmpdir(), 'deploy-agent-uploads', `${projectSlug}-${Date.now()}`);
+    const extractDir = join(uploadDir, 'source');
+    await mkdir(extractDir, { recursive: true });
+
+    const archivePath = join(uploadDir, fileName);
+    await writeFile(archivePath, fileBuffer);
+
+    // Extract based on file type
+    try {
+      if (fileName.endsWith('.zip')) {
+        await execFileAsync('unzip', ['-o', archivePath, '-d', extractDir], { timeout: 60000 });
+      } else if (fileName.endsWith('.tar.gz') || fileName.endsWith('.tgz')) {
+        await execFileAsync('tar', ['-xzf', archivePath, '-C', extractDir], { timeout: 60000 });
+      } else if (fileName.endsWith('.tar')) {
+        await execFileAsync('tar', ['-xf', archivePath, '-C', extractDir], { timeout: 60000 });
+      } else {
+        return reply.status(400).send({ error: 'Unsupported file type. Please upload .zip, .tar.gz, or .tar' });
+      }
+    } catch (err) {
+      return reply.status(400).send({ error: `Failed to extract archive: ${(err as Error).message}` });
+    }
+
+    // Check if archive had a single root directory — if so, use that as project dir
+    const { stdout } = await execFileAsync('ls', [extractDir]);
+    const entries = stdout.trim().split('\n').filter(Boolean);
+    const projectDir = entries.length === 1
+      ? join(extractDir, entries[0])
+      : extractDir;
+
+    // Upload source to GCS for durable storage (Cloud Run /tmp is ephemeral)
+    let gcsSourceUri = '';
+    try {
+      gcsSourceUri = await uploadSourceToGcs(projectSlug, projectDir);
+    } catch (err) {
+      console.error(`[Upload] GCS upload failed, continuing with local path:`, (err as Error).message);
+    }
+
+    const userEnvVars = parseEnvVarsText(envVarsRaw);
+    const project = await createProject({
+      name: name.trim(),
+      sourceType: 'upload',
+      sourceUrl: projectDir,
+      config: {
+        deployTarget: 'cloud_run',
+        customDomain: customDomain.trim() || undefined,
+        allowUnauthenticated,
+        gcsSourceUri,  // persisted source for deploy step
+        envVars: Object.keys(userEnvVars).length > 0 ? userEnvVars : undefined,
+      },
+    });
+
+    await transitionProject(project.id, 'scanning', 'system', { trigger: 'auto' });
+    const scanReport = await createScanReport(project.id);
+
+    runPipeline(project.id, projectDir).catch((err) => {
+      console.error(`[Pipeline] Async dispatch failed for ${project.id}:`, (err as Error).message);
+    });
+
+    return reply.status(201).send({
+      project: { ...project, status: 'scanning' },
+      scanReport,
+      uploadedFile: fileName,
+      extractedTo: projectDir,
+    });
+  });
+
   // Get latest scan report for project
   app.get<{ Params: { id: string } }>('/api/projects/:id/scan', async (request, reply) => {
     const report = await getLatestScanReport(request.params.id);
@@ -74,17 +263,63 @@ export async function projectRoutes(app: FastifyInstance) {
     return { report };
   });
 
-  // Resubmit project (from needs_revision or failed)
+  // Get full project detail: project + scan report + deployments + timeline
+  app.get<{ Params: { id: string } }>('/api/projects/:id/detail', async (request, reply) => {
+    const project = await getProject(request.params.id);
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    const [scanReport, deployments] = await Promise.all([
+      getLatestScanReport(project.id),
+      getDeploymentsByProject(project.id),
+    ]);
+
+    // Get state transitions (timeline)
+    const { query: dbQuery } = await import('../db/index');
+    const transitions = await dbQuery(
+      `SELECT * FROM state_transitions WHERE project_id = $1 ORDER BY created_at ASC`,
+      [project.id]
+    );
+
+    return {
+      project,
+      scanReport,
+      deployments,
+      timeline: transitions.rows.map((r: Record<string, unknown>) => ({
+        id: r.id,
+        fromState: r.from_state,
+        toState: r.to_state,
+        triggeredBy: r.triggered_by,
+        metadata: r.metadata,
+        createdAt: r.created_at,
+      })),
+    };
+  });
+
+  // Resubmit/retry project (from needs_revision or failed) — re-triggers pipeline
   app.post<{ Params: { id: string } }>('/api/projects/:id/resubmit', async (request, reply) => {
     const project = await getProject(request.params.id);
     if (!project) return reply.status(404).send({ error: 'Project not found' });
 
     if (project.status !== 'needs_revision' && project.status !== 'failed') {
-      return reply.status(400).send({ error: `Cannot resubmit from status: ${project.status}` });
+      return reply.status(400).send({ error: `Cannot retry from status: ${project.status}` });
     }
 
-    const updated = await transitionProject(project.id, 'submitted', 'user', { action: 'resubmit' });
-    return { project: updated };
+    // Reset to submitted, then scanning
+    await transitionProject(project.id, 'submitted', 'user', { action: 'retry' });
+    await transitionProject(project.id, 'scanning', 'system', { trigger: 'retry' });
+
+    // Create a new scan report
+    const scanReport = await createScanReport(project.id);
+
+    // Re-trigger pipeline using the existing source
+    const projectDir = project.sourceUrl ?? '';
+    if (projectDir) {
+      runPipeline(project.id, projectDir).catch((err) => {
+        console.error(`[Pipeline] Retry dispatch failed for ${project.id}:`, (err as Error).message);
+      });
+    }
+
+    return { project: { ...project, status: 'scanning' }, scanReport };
   });
 
   // Delete project and tear down all GCP resources

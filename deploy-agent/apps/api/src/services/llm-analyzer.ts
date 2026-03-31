@@ -13,6 +13,8 @@ Your job is to:
 3. For each finding, provide a specific severity, description, and recommended fix
 4. Generate auto-fix patches when safe to do so
 
+Please write all human-readable text fields (summary, title, description, explanation) in bilingual format: Traditional Chinese (繁體中文) first, followed by the English version, separated by " / ". For example: "發現嚴重的身份驗證漏洞 / Critical authentication vulnerability found".
+
 Respond in JSON format matching the schema provided.`;
 
 export interface ThreatAnalysis {
@@ -107,7 +109,7 @@ ${fileList}
 
 Respond with JSON:
 {
-  "summary": "One paragraph threat model summary",
+  "summary": "One paragraph threat model summary in bilingual format (繁體中文 first, then English)",
   "findings": [
     {
       "category": "auth|injection|secrets|config|endpoint_exposure|error_handling|bola",
@@ -205,16 +207,16 @@ ${allFindings.filter((f) => f.action === 'report_only').map((f) => `- [${f.sever
 Auto-fixes applied:
 ${autoFixResults.filter((r) => r.applied).map((r) => `- ${r.explanation}`).join('\n')}
 
-Write a concise report with sections:
-1. Executive Summary (2-3 sentences)
-2. Auto-Fixes Applied (list with explanations)
-3. Findings Requiring Human Review (grouped by severity)
-4. Deploy Security Baseline (what security settings will be enforced)
-5. Recommendation (approve/conditional approve/reject with reasoning)`;
+Write a concise report in bilingual format (Traditional Chinese 繁體中文 first, then English for each section) with sections:
+1. 執行摘要 / Executive Summary (2-3 sentences)
+2. 已套用的自動修復 / Auto-Fixes Applied (list with explanations)
+3. 需要人工審查的發現 / Findings Requiring Human Review (grouped by severity)
+4. 部署安全基線 / Deploy Security Baseline (what security settings will be enforced)
+5. 建議 / Recommendation (approve/conditional approve/reject with reasoning)`;
 
   try {
     const result = await callLLM(
-      'You are a security review report writer. Generate clear, actionable reports.',
+      'You are a security review report writer. Generate clear, actionable reports. Please write the report in bilingual format: each section should have both Traditional Chinese (繁體中文) and English. Write the Chinese version first, followed by the English version.',
       userMessage,
       4000
     );

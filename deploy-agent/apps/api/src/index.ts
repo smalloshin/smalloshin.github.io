@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import { projectRoutes } from './routes/projects';
 import { reviewRoutes } from './routes/reviews';
 import { deployRoutes } from './routes/deploys';
@@ -21,6 +22,9 @@ await app.register(cors, {
   origin: process.env.CORS_ORIGIN ?? '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
 });
+
+// Multipart file upload (100MB limit)
+await app.register(multipart, { limits: { fileSize: 100 * 1024 * 1024 } });
 
 // Health check
 app.get('/health', async () => ({

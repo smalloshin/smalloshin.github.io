@@ -36,14 +36,25 @@ export async function runPipeline(
   console.log(`\n[Pipeline] Starting for project ${projectId}`);
   console.log(`[Pipeline] Project dir: ${projectDir}`);
 
+  let currentStep = '';
+
   try {
     // ─── Step 1: Project Detection ───
-    console.log('[Pipeline] Step 1: Detecting project...');
+    currentStep = 'Step 1: Project Detection';
+    console.log(`[Pipeline] ${currentStep}...`);
     const detection = detectProject(projectDir);
     console.log(`[Pipeline]   ${detection.framework} (${detection.language}), port ${detection.port}`);
 
+    // Update project with detected info
+    const { query: dbQuery } = await import('../db/index');
+    await dbQuery(
+      'UPDATE projects SET detected_language = $1, detected_framework = $2, updated_at = NOW() WHERE id = $3',
+      [detection.language, detection.framework, projectId]
+    );
+
     // ─── Step 2: Dockerfile Generation (if missing) ───
-    console.log('[Pipeline] Step 2: Checking Dockerfile...');
+    currentStep = 'Step 2: Dockerfile Generation';
+    console.log(`[Pipeline] ${currentStep}...`);
     if (!detection.hasDockerfile) {
       const dockerfile = generateDockerfile(detection);
       const { writeFileSync: wfs } = await import('node:fs');
@@ -54,7 +65,8 @@ export async function runPipeline(
     }
 
     // ─── Step 3: Security Scanning (Semgrep + Trivy) ───
-    console.log('[Pipeline] Step 3: Running security scans...');
+    currentStep = 'Step 3: Security Scanning (Semgrep + Trivy)';
+    console.log(`[Pipeline] ${currentStep}...`);
     const [semgrepResult, trivyResult] = await Promise.all([
       runSemgrep(projectDir).catch((err) => {
         console.warn(`[Pipeline]   Semgrep failed: ${(err as Error).message}`);
@@ -80,7 +92,8 @@ export async function runPipeline(
     }
 
     // ─── Step 4: LLM Threat Analysis ───
-    console.log('[Pipeline] Step 4: LLM threat analysis...');
+    currentStep = 'Step 4: LLM Threat Analysis';
+    console.log(`[Pipeline] ${currentStep}...`);
     const sourceFiles = collectSourceFiles(projectDir);
     console.log(`[Pipeline]   Collected ${sourceFiles.size} source files`);
 
@@ -97,7 +110,8 @@ export async function runPipeline(
     }
 
     // ─── Step 5: Auto-Fix Application ───
-    console.log('[Pipeline] Step 5: Applying auto-fixes...');
+    currentStep = 'Step 5: Auto-Fix Application';
+    console.log(`[Pipeline] ${currentStep}...`);
     const autoFixResults: AutoFixResult[] = [];
 
     for (const fix of threatAnalysis.autoFixes) {
@@ -143,7 +157,8 @@ export async function runPipeline(
 
     // ─── Step 6: Verification Scan (re-scan after fixes) ───
     if (appliedCount > 0) {
-      console.log('[Pipeline] Step 6: Verification scan...');
+      currentStep = 'Step 6: Verification Scan';
+      console.log(`[Pipeline] ${currentStep}...`);
       const [verifySemgrep, verifyTrivy] = await Promise.all([
         runSemgrep(projectDir).catch(() => ({ findings: [] as ScanFinding[] })),
         runTrivy(projectDir).catch(() => ({ findings: [] as ScanFinding[] })),
@@ -157,7 +172,8 @@ export async function runPipeline(
     }
 
     // ─── Step 7: Cost Estimation ───
-    console.log('[Pipeline] Step 7: Cost estimation...');
+    currentStep = 'Step 7: Cost Estimation';
+    console.log(`[Pipeline] ${currentStep}...`);
     const costEstimate = estimateMonthlyCost({
       cpu: 1,
       memoryMB: 512,
@@ -173,7 +189,8 @@ export async function runPipeline(
     }
 
     // ─── Step 8: Generate Review Report ───
-    console.log('[Pipeline] Step 8: Generating review report...');
+    currentStep = 'Step 8: Generate Review Report';
+    console.log(`[Pipeline] ${currentStep}...`);
     const allFindings = [...scannerFindings, ...threatAnalysis.findings];
     const reviewReport = await generateReviewReport(
       projectId,
@@ -191,7 +208,8 @@ export async function runPipeline(
     }
 
     // ─── Step 9: Transition to review_pending ───
-    console.log('[Pipeline] Step 9: Transitioning to review_pending...');
+    currentStep = 'Step 9: Transition to review_pending';
+    console.log(`[Pipeline] ${currentStep}...`);
     await transitionProject(projectId, 'review_pending', 'pipeline-worker', {
       totalFindings: allFindings.length,
       criticalFindings: allFindings.filter((f) => f.severity === 'critical').length,
@@ -209,10 +227,19 @@ export async function runPipeline(
     console.log(`[Pipeline]   Status: review_pending — awaiting human approval`);
 
   } catch (err) {
-    console.error(`[Pipeline] ✗ Failed for project ${projectId}:`, (err as Error).message);
+    const error = err as Error;
+    const errorDetail = [
+      `Pipeline failed at: ${currentStep}`,
+      `Error: ${error.message}`,
+      error.stack ? `Stack: ${error.stack.split('\n').slice(0, 5).join('\n')}` : '',
+    ].filter(Boolean).join('\n');
+
+    console.error(`[Pipeline] ✗ Failed for project ${projectId}:\n${errorDetail}`);
     try {
       await transitionProject(projectId, 'failed', 'pipeline-worker', {
-        error: (err as Error).message,
+        error: error.message,
+        failedStep: currentStep,
+        stack: error.stack?.split('\n').slice(0, 5).join(' → ') ?? '',
       });
     } catch (transitionErr) {
       console.error('[Pipeline] Could not transition to failed:', (transitionErr as Error).message);

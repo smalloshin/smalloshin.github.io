@@ -58,9 +58,9 @@ export default function SettingsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setMessage({ type: 'success', text: 'Settings saved successfully.' });
+        setMessage({ type: 'success', text: '設定已儲存。' });
       } else {
-        setMessage({ type: 'error', text: data.message ?? 'Failed to save settings.' });
+        setMessage({ type: 'error', text: data.message ?? '儲存設定失敗。' });
       }
     } catch (err) {
       setMessage({ type: 'error', text: (err as Error).message });
@@ -71,37 +71,37 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div>
-        <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 24 }}>Settings</h2>
-        <div style={{ color: 'var(--text-secondary)' }}>Loading settings...</div>
+        <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 24 }}>設定</h2>
+        <div style={{ color: 'var(--text-secondary)' }}>載入設定中...</div>
       </div>
     );
   }
 
   return (
     <div>
-      <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 24 }}>Settings</h2>
+      <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 24 }}>設定</h2>
 
-      <Section title="GCP Configuration">
-        <Field label="GCP Project ID" placeholder="my-gcp-project" value={settings.gcpProject} onChange={(v) => update('gcpProject', v)} />
-        <Field label="Region" placeholder="asia-east1" value={settings.gcpRegion} onChange={(v) => update('gcpRegion', v)} />
+      <Section title="GCP 設定">
+        <Field label="GCP 專案 ID" placeholder="my-gcp-project" value={settings.gcpProject} onChange={(v) => update('gcpProject', v)} />
+        <Field label="區域" placeholder="asia-east1" value={settings.gcpRegion} onChange={(v) => update('gcpRegion', v)} />
         <Field label="Artifact Registry" placeholder="asia-east1-docker.pkg.dev/project/repo" value={settings.artifactRegistry} onChange={(v) => update('artifactRegistry', v)} />
       </Section>
 
-      <Section title="Domain Management">
-        <Field label="Base Domain" placeholder="deploy.yourdomain.com" value={settings.baseDomain} onChange={(v) => update('baseDomain', v)} />
+      <Section title="網域管理">
+        <Field label="基礎網域" placeholder="deploy.yourdomain.com" value={settings.baseDomain} onChange={(v) => update('baseDomain', v)} />
         <Field label="Cloudflare Zone ID" placeholder="zone-id" value={settings.cloudflareZoneId} onChange={(v) => update('cloudflareZoneId', v)} />
-        <Field label="Cloudflare Zone Name" placeholder="yourdomain.com" value={settings.cloudflareZoneName} onChange={(v) => update('cloudflareZoneName', v)} />
+        <Field label="Cloudflare Zone 名稱" placeholder="yourdomain.com" value={settings.cloudflareZoneName} onChange={(v) => update('cloudflareZoneName', v)} />
         <Field label="Cloudflare API Token" placeholder="token" type="password" value={settings.cloudflareToken} onChange={(v) => update('cloudflareToken', v)} />
         <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 4 }}>
-          Projects will be deployed to [slug].yourdomain.com
+          專案將部署至 [slug].yourdomain.com
         </p>
       </Section>
 
-      <Section title="Notifications">
+      <Section title="通知">
         <Field label="Slack Webhook URL" placeholder="https://hooks.slack.com/..." value={settings.slackWebhookUrl} onChange={(v) => update('slackWebhookUrl', v)} />
       </Section>
 
-      <Section title="API Keys">
+      <Section title="API 金鑰">
         <Field label="Anthropic API Key" placeholder="sk-ant-..." type="password" value={settings.anthropicApiKey} onChange={(v) => update('anthropicApiKey', v)} />
         <Field label="GitHub Token" placeholder="ghp_..." type="password" value={settings.githubToken} onChange={(v) => update('githubToken', v)} />
       </Section>
@@ -119,7 +119,7 @@ export default function SettingsPage() {
 
       <div style={{ marginTop: 24 }}>
         <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Settings'}
+          {saving ? '儲存中...' : '儲存設定'}
         </button>
       </div>
     </div>

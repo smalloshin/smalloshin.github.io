@@ -44,6 +44,8 @@ export interface ProjectConfig {
   allowUnauthenticated: boolean;
   gcpProject?: string;
   gcpRegion?: string;
+  gcsSourceUri?: string;  // GCS URI for uploaded source (durable across Cloud Run revisions)
+  envVars?: Record<string, string>;  // User-provided env vars (merged with auto-detected)
 }
 
 export interface ScanFinding {

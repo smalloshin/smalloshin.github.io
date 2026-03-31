@@ -2,12 +2,8 @@
 // Polls Cloud Run domain mapping status until all conditions are True
 // Then transitions project ssl_provisioning → canary_check
 
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { gcpFetch } from './gcp-auth';
 import { query } from '../db/index';
-import { transitionProject } from './orchestrator';
-
-const execFileAsync = promisify(execFile);
 
 export interface SslCondition {
   type: string;
@@ -45,15 +41,14 @@ export async function checkSslStatus(
   domain: string
 ): Promise<SslStatusResult> {
   try {
-    const { stdout } = await execFileAsync('gcloud', [
-      'beta', 'run', 'domain-mappings', 'describe',
-      '--domain', domain,
-      '--project', gcpProject,
-      '--region', gcpRegion,
-      '--format', 'json',
-    ], { timeout: 30 * 1000 });
+    const url = `https://${gcpRegion}-run.googleapis.com/apis/domains.cloudrun.com/v1/namespaces/${gcpProject}/domainmappings/${domain}`;
+    const res = await gcpFetch(url);
 
-    const mapping = JSON.parse(stdout);
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    }
+
+    const mapping = await res.json() as { status?: { conditions?: Record<string, string>[] } };
     const conditions: SslCondition[] = (mapping.status?.conditions ?? []).map(
       (c: Record<string, string>) => ({
         type: c.type,
@@ -105,18 +100,6 @@ export async function monitorSsl(
 
     if (status.allReady) {
       console.log(`  SSL: All conditions True for ${cfg.domain} (check ${i + 1}/${cfg.maxChecks})`);
-
-      // Transition project to canary_check
-      try {
-        await transitionProject(projectId, 'canary_check', 'ssl-monitor', {
-          domain: cfg.domain,
-          sslReadyAt: status.checkedAt.toISOString(),
-          checksRequired: i + 1,
-        });
-      } catch (err) {
-        console.error(`  SSL: State transition failed: ${(err as Error).message}`);
-      }
-
       return status;
     }
 
@@ -127,19 +110,10 @@ export async function monitorSsl(
     console.log(`  SSL: Check ${i + 1}/${cfg.maxChecks} — pending: ${pendingConditions}`);
   }
 
-  // Timed out
+  // Timed out — don't transition to failed, just return the result
+  // The caller (deploy-worker) decides whether to continue or fail
   const finalStatus = await checkSslStatus(cfg.gcpProject, cfg.gcpRegion, cfg.domain);
-  console.error(`  SSL: Timed out after ${cfg.maxChecks} checks for ${cfg.domain}`);
-
-  try {
-    await transitionProject(projectId, 'failed', 'ssl-monitor', {
-      domain: cfg.domain,
-      reason: 'ssl_timeout',
-      lastConditions: finalStatus.conditions,
-    });
-  } catch (err) {
-    console.error(`  SSL: State transition to failed: ${(err as Error).message}`);
-  }
+  console.warn(`  SSL: Timed out after ${cfg.maxChecks} checks for ${cfg.domain} — continuing pipeline`);
 
   return finalStatus;
 }

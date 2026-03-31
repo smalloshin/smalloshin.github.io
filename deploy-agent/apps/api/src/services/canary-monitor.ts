@@ -1,4 +1,5 @@
 import type { CanaryResult, CanaryCheck } from '@deploy-agent/shared';
+import { gcpFetch } from './gcp-auth';
 
 export interface CanaryConfig {
   serviceUrl: string;
@@ -65,10 +66,19 @@ export async function runCanaryChecks(
   };
 }
 
+// Use authenticated fetch for Cloud Run URLs (*.run.app), plain fetch for custom domains
+async function authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  if (url.includes('.run.app')) {
+    // Cloud Run URL — use service account identity token
+    return gcpFetch(url, { ...options, useIdentityToken: true } as Parameters<typeof gcpFetch>[1]);
+  }
+  return fetch(url, options);
+}
+
 async function checkHealth(serviceUrl: string, path: string): Promise<CanaryCheck> {
   const url = `${serviceUrl}${path}`;
   try {
-    const response = await fetch(url, {
+    const response = await authenticatedFetch(url, {
       method: 'GET',
       signal: AbortSignal.timeout(10000),
     });
@@ -95,7 +105,7 @@ async function checkLatency(serviceUrl: string, path: string, maxMs: number): Pr
   const url = `${serviceUrl}${path}`;
   const start = Date.now();
   try {
-    await fetch(url, {
+    await authenticatedFetch(url, {
       method: 'GET',
       signal: AbortSignal.timeout(maxMs),
     });

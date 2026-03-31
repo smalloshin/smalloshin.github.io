@@ -1,78 +1,188 @@
 ---
 name: deploy
-description: Submit, scan, review, and deploy vibe-coded projects to GCP Cloud Run with security scanning and auto-fix.
+description: 潮部署！上傳專案到 Wave Deploy Agent 進行安全掃描、自動修復、審查並部署到 GCP Cloud Run。觸發詞：「我要潮部署」
 ---
 
-# /deploy — Secure Deploy Agent
+# /deploy — Wave Deploy Agent 潮部署
 
-Submit vibe-coded projects for security scanning, auto-fix, human review, and deployment to GCP Cloud Run.
+🚀 **我要潮部署某個專案！**
 
-## Commands
+將專案提交到 Wave Deploy Agent，經過安全掃描、AI 自動修復、人工審查，最終部署到 GCP Cloud Run。
 
-### Submit a project
-```bash
-curl -s -X POST http://localhost:4000/api/projects \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"PROJECT_NAME","sourceType":"SOURCE_TYPE","sourceUrl":"URL_OR_PATH"}'
+## API Base URL
+
+```
+https://wave-deploy-agent-api.punwave.com
 ```
 
-Source types: `upload`, `git`, `openclaw`
+Dashboard：https://wave-deploy-agent.punwave.com
 
-### Check project status
+## 完整部署流程
+
+當使用者說「我要潮部署」時，按照以下步驟執行：
+
+### Step 1: 確認專案資訊
+
+向使用者確認以下資訊（如果尚未提供）：
+- **專案名稱**（必填）— 例如 `my-awesome-app`
+- **來源方式**（必填）— `upload`（上傳壓縮檔）或 `git`（Git 倉庫 URL）
+- **自訂網域**（選填）— 例如 `my-app`（會變成 `my-app.punwave.com`）
+- **是否公開**（選填）— 預設 `true`，允許未驗證存取
+
+### Step 2: 提交專案
+
+**方式 A — 上傳壓縮檔：**
+
+如果使用者提供了本地路徑或檔案：
 ```bash
-curl -s http://localhost:4000/api/projects/PROJECT_ID
+# 打包專案
+tar -czf /tmp/PROJECT_NAME.tgz -C /path/to/project .
+
+# 上傳
+curl -s -X POST "https://wave-deploy-agent-api.punwave.com/api/projects/upload" \
+  -F "name=PROJECT_NAME" \
+  -F "sourceType=upload" \
+  -F "customDomain=SUBDOMAIN" \
+  -F "allowUnauthenticated=true" \
+  -F "file=@/tmp/PROJECT_NAME.tgz"
 ```
 
-### List all projects
+**方式 B — Git 倉庫：**
 ```bash
-curl -s http://localhost:4000/api/projects
+curl -s -X POST "https://wave-deploy-agent-api.punwave.com/api/projects/upload" \
+  -F "name=PROJECT_NAME" \
+  -F "sourceType=git" \
+  -F "gitUrl=https://github.com/owner/repo"
 ```
 
-### Get scan report
+記下回傳的 `project.id`。
+
+### Step 3: 等待掃描完成
+
+每 10 秒輪詢一次，直到狀態變為 `review_pending`：
 ```bash
-curl -s http://localhost:4000/api/projects/PROJECT_ID/scan
+curl -s "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID" \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['project']['status'])"
 ```
 
-### Approve deployment
+過程中向使用者即時回報進度：
+- `scanning` → 「🔍 掃描中...正在分析程式碼安全性」
+- `review_pending` → 「✅ 掃描完成！等待審查」
+
+### Step 4: 查看掃描報告
+
 ```bash
-curl -s -X POST http://localhost:4000/api/reviews/REVIEW_ID/decide \
-  -H 'Content-Type: application/json' \
-  -d '{"decision":"approved","reviewerEmail":"you@example.com","comments":"LGTM"}'
+curl -s "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID/detail"
 ```
 
-### Reject deployment
+向使用者摘要報告內容：
+- 發現了幾個安全問題
+- 自動修復了幾個
+- 預估月費是多少
+
+### Step 5: 查找待審查項目
+
 ```bash
-curl -s -X POST http://localhost:4000/api/reviews/REVIEW_ID/decide \
-  -H 'Content-Type: application/json' \
-  -d '{"decision":"rejected","reviewerEmail":"you@example.com","comments":"Fix the hardcoded secrets"}'
+curl -s "https://wave-deploy-agent-api.punwave.com/api/reviews?status=pending" \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); [print(r['id']) for r in d['reviews'] if r.get('project_name')=='PROJECT_NAME']"
 ```
 
-## MCP Integration
+### Step 6: 通過審查（觸發部署）
 
-The agent exposes an MCP endpoint at `/mcp/tools/list` and `/mcp/tools/call`.
+詢問使用者是否通過審查。如果通過：
+```bash
+curl -s -X POST "https://wave-deploy-agent-api.punwave.com/api/reviews/REVIEW_ID/decide" \
+  -H "Content-Type: application/json" \
+  -d '{"decision":"approved","reviewerEmail":"USER_EMAIL","comments":"潮部署通過！"}'
+```
 
-Available MCP tools:
-- `submit_project` — Submit a project for scanning
-- `get_project_status` — Check project status
-- `list_projects` — List all projects
-- `get_scan_report` — Get security scan report
-- `approve_deploy` — Approve for deployment
-- `reject_deploy` — Reject with feedback
-- `get_deploy_status` — Check deployment health
-- `rollback_deploy` — Rollback to previous version
+如果駁回：
+```bash
+curl -s -X POST "https://wave-deploy-agent-api.punwave.com/api/reviews/REVIEW_ID/decide" \
+  -H "Content-Type: application/json" \
+  -d '{"decision":"rejected","reviewerEmail":"USER_EMAIL","comments":"REASON"}'
+```
 
-## Pipeline
+### Step 7: 等待部署完成
 
-1. Project Detection (language, framework)
-2. Dockerfile Generation (if missing)
-3. SAST Scan (Semgrep)
-4. SCA Scan (Trivy)
-5. LLM Threat Analysis (Claude)
-6. Auto-Fix + Verification
-7. Review Report Generation
-8. Cost Estimation
-9. Preview Deploy
-10. **Human Review Gate**
-11. Production Deploy (Cloud Run + SSL)
-12. Canary Health Checks
-13. Git PR with security fixes
+通過審查後，自動觸發部署 pipeline。每 15 秒輪詢：
+```bash
+curl -s "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID" \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['project']['status'])"
+```
+
+向使用者即時回報：
+- `deploying` → 「🏗️ 部署中...Cloud Build 正在建構映像」
+- `deployed` → 「📦 映像已部署到 Cloud Run」
+- `ssl_provisioning` → 「🔒 SSL 憑證申請中...」
+- `canary_check` → 「🐦 Canary 健康檢查中...」
+- `live` → 「🎉 潮部署完成！專案已上線！」
+- `failed` → 「❌ 部署失敗，查看詳情...」
+
+### Step 8: 回報最終結果
+
+部署成功後，顯示：
+```bash
+curl -s "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID/detail"
+```
+
+向使用者展示：
+- Cloud Run URL
+- 自訂網域 URL（如有）
+- 健康狀態
+- 部署時間
+
+---
+
+## 其他操作
+
+### 查看所有專案
+```bash
+curl -s "https://wave-deploy-agent-api.punwave.com/api/projects"
+```
+
+### 查看專案詳情
+```bash
+curl -s "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID/detail"
+```
+
+### 重試失敗的專案
+```bash
+curl -s -X POST "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID/resubmit"
+```
+
+### 刪除專案（含 GCP 資源清除）
+```bash
+curl -s -X DELETE "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID"
+```
+
+### 查看部署紀錄
+```bash
+curl -s "https://wave-deploy-agent-api.punwave.com/api/deploys"
+```
+
+---
+
+## Pipeline 流程
+
+```
+提交 → 語言偵測 → Dockerfile 生成 → SAST 掃描 → SCA 掃描
+  → AI 威脅分析 → 自動修復 → 驗證掃描 → 審查報告
+  → 成本估算 → 【人工審查】→ Cloud Build → Cloud Run
+  → 網域設定 → SSL 憑證 → Canary 檢查 → 🎉 上線！
+```
+
+## MCP 工具
+
+API 提供 MCP 端點 `/mcp/tools/list` 和 `/mcp/tools/call`：
+
+| 工具 | 說明 |
+|------|------|
+| `submit_project` | 提交專案進行掃描 |
+| `get_project_status` | 查看專案狀態 |
+| `list_projects` | 列出所有專案 |
+| `get_scan_report` | 取得安全掃描報告 |
+| `approve_deploy` | 通過審查，觸發部署 |
+| `reject_deploy` | 駁回審查 |
+| `get_deploy_status` | 查看部署健康狀態 |
+| `rollback_deploy` | 回滾到上一版本 |

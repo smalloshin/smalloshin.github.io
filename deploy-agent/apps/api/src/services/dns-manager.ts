@@ -1,10 +1,8 @@
 // Cloudflare DNS + Cloud Run domain mapping
 // Flow: Deploy to Cloud Run → domain mapping (ghs.googlehosted.com) → CNAME in Cloudflare
 
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { gcpFetch } from './gcp-auth';
 
-const execFileAsync = promisify(execFile);
 const CF_API = 'https://api.cloudflare.com/client/v4';
 
 export interface DnsConfig {
@@ -162,22 +160,26 @@ async function createDomainMapping(
   domain: string
 ): Promise<{ success: boolean; error: string | null }> {
   try {
-    await execFileAsync('gcloud', [
-      'beta', 'run', 'domain-mappings', 'create',
-      '--service', serviceName,
-      '--domain', domain,
-      '--region', gcpRegion,
-      '--project', gcpProject,
-      '--quiet',
-    ], { timeout: 120 * 1000 });
-    return { success: true, error: null };
-  } catch (err) {
-    const msg = (err as Error).message;
-    // Already mapped is not an error
-    if (msg.includes('already mapped') || msg.includes('already exists')) {
+    const url = `https://${gcpRegion}-run.googleapis.com/apis/domains.cloudrun.com/v1/namespaces/${gcpProject}/domainmappings`;
+    const res = await gcpFetch(url, {
+      method: 'POST',
+      body: JSON.stringify({
+        apiVersion: 'domains.cloudrun.com/v1',
+        kind: 'DomainMapping',
+        metadata: { name: domain, namespace: gcpProject },
+        spec: { routeName: serviceName },
+      }),
+    });
+
+    if (res.ok) return { success: true, error: null };
+
+    const body = await res.text();
+    if (body.includes('already mapped') || body.includes('already exists') || res.status === 409) {
       return { success: true, error: null };
     }
-    return { success: false, error: msg };
+    return { success: false, error: `HTTP ${res.status}: ${body}` };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
 }
 

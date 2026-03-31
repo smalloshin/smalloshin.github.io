@@ -6,6 +6,7 @@ import {
   getProject,
   transitionProject,
 } from '../services/orchestrator';
+import { runDeployPipeline } from '../services/deploy-worker';
 
 const reviewSchema = z.object({
   decision: z.enum(['approved', 'rejected']),
@@ -93,6 +94,11 @@ export async function reviewRoutes(app: FastifyInstance) {
       await transitionProject(projectId, 'approved', body.reviewerEmail, {
         reviewId: request.params.id,
         comments: body.comments,
+      });
+
+      // Trigger deploy pipeline asynchronously
+      runDeployPipeline(projectId, request.params.id).catch((err) => {
+        console.error(`[Deploy] Async dispatch failed for ${projectId}:`, (err as Error).message);
       });
     } else {
       await transitionProject(projectId, 'rejected', body.reviewerEmail, {
