@@ -15,6 +15,7 @@ export interface DeployConfig {
   maxInstances?: number;
   allowUnauthenticated?: boolean;
   port?: number;
+  cloudSqlInstance?: string;  // CloudSQL instance connection name for annotation
 }
 
 export interface DeployResult {
@@ -152,6 +153,23 @@ export async function deployToCloudRun(config: DeployConfig, imageUri: string): 
     // Build service spec
     const envVars = Object.entries(config.envVars).map(([name, value]) => ({ name, value }));
 
+    // Build template annotations (e.g., CloudSQL connection)
+    const templateAnnotations: Record<string, string> = {};
+    const volumeMounts: Array<{ name: string; mountPath: string }> = [];
+    const volumes: Array<{ name: string; cloudSqlInstance?: { instances: Array<{ instance: string }> } }> = [];
+
+    if (config.cloudSqlInstance) {
+      // Cloud Run v2: use volume mount for CloudSQL
+      volumes.push({
+        name: 'cloudsql',
+        cloudSqlInstance: {
+          instances: [{ instance: config.cloudSqlInstance }],
+        },
+      });
+      volumeMounts.push({ name: 'cloudsql', mountPath: '/cloudsql' });
+      console.log(`[Deploy]   CloudSQL connection: ${config.cloudSqlInstance}`);
+    }
+
     const serviceSpec = {
       template: {
         containers: [
@@ -165,8 +183,10 @@ export async function deployToCloudRun(config: DeployConfig, imageUri: string): 
               },
             },
             env: envVars.length > 0 ? envVars : undefined,
+            volumeMounts: volumeMounts.length > 0 ? volumeMounts : undefined,
           },
         ],
+        volumes: volumes.length > 0 ? volumes : undefined,
         scaling: {
           minInstanceCount: config.minInstances ?? 0,
           maxInstanceCount: config.maxInstances ?? 10,
@@ -438,6 +458,88 @@ export async function setupCustomDomain(
       return { success: true, error: null };
     }
     return { success: false, error: `HTTP ${res.status}: ${body}` };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
+}
+
+// ─── Update env vars on an existing Cloud Run service (no rebuild) ───
+
+export async function updateServiceEnvVars(
+  gcpProject: string,
+  gcpRegion: string,
+  serviceName: string,
+  envVars: Record<string, string>,
+): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const parent = `projects/${gcpProject}/locations/${gcpRegion}`;
+    const serviceUrl = `https://run.googleapis.com/v2/${parent}/services/${serviceName}`;
+
+    // 1. GET existing service spec
+    const getRes = await gcpFetch(serviceUrl);
+    if (!getRes.ok) {
+      const err = await getRes.text();
+      throw new Error(`Failed to get service ${serviceName} (${getRes.status}): ${err}`);
+    }
+
+    const service = await getRes.json() as {
+      template: {
+        containers: Array<{
+          image: string;
+          env?: Array<{ name: string; value: string }>;
+          [key: string]: unknown;
+        }>;
+        [key: string]: unknown;
+      };
+      [key: string]: unknown;
+    };
+
+    // 2. Extract current container spec
+    const container = service.template?.containers?.[0];
+    if (!container) {
+      throw new Error(`Service ${serviceName} has no containers in its template`);
+    }
+
+    // 3. Merge new env vars with existing ones (new values override)
+    const existingEnv: Record<string, string> = {};
+    for (const entry of container.env ?? []) {
+      existingEnv[entry.name] = entry.value;
+    }
+    const mergedEnv = { ...existingEnv, ...envVars };
+    container.env = Object.entries(mergedEnv).map(([name, value]) => ({ name, value }));
+
+    // 4. PATCH the service with updated template only
+    const patchRes = await gcpFetch(serviceUrl, {
+      method: 'PATCH',
+      body: JSON.stringify({ template: service.template }),
+    });
+
+    if (!patchRes.ok) {
+      const err = await patchRes.text();
+      throw new Error(`Failed to update env vars on ${serviceName} (${patchRes.status}): ${err}`);
+    }
+
+    const op = await patchRes.json() as { name: string };
+    const operationUrl = `https://run.googleapis.com/v2/${op.name}`;
+
+    // 5. Poll the operation until done
+    const maxWait = 3 * 60 * 1000;
+    const start = Date.now();
+    while (Date.now() - start < maxWait) {
+      await sleep(3000);
+      const opRes = await gcpFetch(operationUrl);
+      if (!opRes.ok) break;
+      const opData = await opRes.json() as { done?: boolean; error?: { message: string } };
+      if (opData.done) {
+        if (opData.error) {
+          throw new Error(`Operation failed: ${opData.error.message}`);
+        }
+        break;
+      }
+    }
+
+    console.log(`[Deploy] Updated env vars on ${serviceName}: ${Object.keys(envVars).join(', ')}`);
+    return { success: true, error: null };
   } catch (err) {
     return { success: false, error: (err as Error).message };
   }

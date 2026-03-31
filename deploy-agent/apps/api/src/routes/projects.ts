@@ -15,9 +15,10 @@ import {
   getLatestScanReport,
   getDeploymentsByProject,
   deleteProjectFromDb,
+  updateProjectConfig,
 } from '../services/orchestrator';
 import { runPipeline } from '../services/pipeline-worker';
-import { deleteService, deleteDomainMapping, deleteContainerImage } from '../services/deploy-engine';
+import { deleteService, deleteDomainMapping, deleteContainerImage, updateServiceEnvVars } from '../services/deploy-engine';
 import { deleteCname } from '../services/dns-manager';
 
 const execFileAsync = promisify(execFile);
@@ -390,5 +391,71 @@ export async function projectRoutes(app: FastifyInstance) {
     console.log(`[Teardown] Project "${project.name}" (${project.id}) deleted:`, JSON.stringify(teardownLog));
 
     return { success: true, project: { id: project.id, name: project.name }, teardownLog };
+  });
+
+  // Get environment variable keys (values masked) for a deployed project
+  app.get<{ Params: { id: string } }>('/api/projects/:id/env-vars', async (request, reply) => {
+    const project = await getProject(request.params.id);
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    const envVars: Record<string, string> = (project.config?.envVars as Record<string, string>) ?? {};
+    const maskedVars = Object.entries(envVars).map(([key, value]) => ({
+      key,
+      maskedValue: value.length > 3 ? value.slice(0, 3) + '***' : '***',
+    }));
+
+    return { projectId: project.id, envVars: maskedVars };
+  });
+
+  // Update environment variables for a deployed project (no rebuild)
+  app.patch<{ Params: { id: string } }>('/api/projects/:id/env-vars', async (request, reply) => {
+    const project = await getProject(request.params.id);
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    // Validate request body
+    const body = request.body as { envVars?: Record<string, string> };
+    if (!body.envVars || typeof body.envVars !== 'object') {
+      return reply.status(400).send({ error: 'Request body must include envVars object' });
+    }
+
+    // Find a deployment with a Cloud Run service
+    const deployments = await getDeploymentsByProject(project.id);
+    const activeDeployment = deployments.find((d) => d.cloudRunService);
+    if (!activeDeployment || !activeDeployment.cloudRunService) {
+      return reply.status(400).send({ error: 'No active Cloud Run deployment found for this project' });
+    }
+
+    const gcpProject = (project.config?.gcpProject as string) || process.env.GCP_PROJECT || '';
+    const gcpRegion = (project.config?.gcpRegion as string) || process.env.GCP_REGION || 'asia-east1';
+
+    if (!gcpProject) {
+      return reply.status(400).send({ error: 'GCP project not configured' });
+    }
+
+    // Merge with existing env vars
+    const existingEnvVars: Record<string, string> = (project.config?.envVars as Record<string, string>) ?? {};
+    const mergedEnvVars = { ...existingEnvVars, ...body.envVars };
+
+    // Update Cloud Run service env vars (no rebuild)
+    const result = await updateServiceEnvVars(
+      gcpProject,
+      gcpRegion,
+      activeDeployment.cloudRunService,
+      mergedEnvVars,
+    );
+
+    if (!result.success) {
+      return reply.status(500).send({ error: `Failed to update env vars: ${result.error}` });
+    }
+
+    // Update project config in DB
+    const updatedConfig = { ...(project.config ?? {}), envVars: mergedEnvVars };
+    await updateProjectConfig(project.id, updatedConfig as Record<string, unknown>);
+
+    return {
+      success: true,
+      projectId: project.id,
+      updatedKeys: Object.keys(mergedEnvVars),
+    };
   });
 }

@@ -73,20 +73,32 @@ export async function runDeployPipeline(
       customDomain: customDomainFqdn,
       gcpProject,
       gcpRegion,
+      projectSlug: project.slug,
       port,
     });
 
     for (const note of envDetection.notes) {
       console.log(`[Deploy]   ENV: ${note}`);
     }
+    if (envDetection.warnings.length > 0) {
+      for (const w of envDetection.warnings) {
+        console.warn(`[Deploy]   ⚠ ${w.type}: ${w.variable} in ${w.file}:${w.line} — ${w.recommendation}`);
+      }
+    }
     if (envDetection.missing.length > 0) {
-      console.warn(`[Deploy]   ENV missing (user should provide): ${envDetection.missing.join(', ')}`);
+      console.warn(`[Deploy]   ENV missing (user can inject post-deploy): ${envDetection.missing.join(', ')}`);
     }
 
     // Merge: auto-detected + user-provided (user values take priority)
     const userEnvVars = (project.config?.envVars as Record<string, string>) ?? {};
     const finalEnvVars = mergeEnvVars(envDetection.detected, userEnvVars);
     console.log(`[Deploy]   ENV total: ${Object.keys(finalEnvVars).length} vars (${Object.keys(envDetection.detected).length} auto + ${Object.keys(userEnvVars).length} user)`);
+
+    // Determine if CloudSQL connection is needed
+    const needsCloudSql = !!(finalEnvVars['DATABASE_URL'] || finalEnvVars['KOL_DATABASE_URL']);
+    const cloudSqlInstance = needsCloudSql
+      ? `${gcpProject}:${gcpRegion}:deploy-agent-db`
+      : undefined;
 
     // ─── Step 3: Build and push Docker image ───
     currentStep = 'Step 3: Build Docker image (Cloud Build)';
@@ -122,6 +134,7 @@ export async function runDeployPipeline(
       maxInstances: 10,
       allowUnauthenticated: project.config?.allowUnauthenticated ?? false,
       port,
+      cloudSqlInstance,
     }, buildResult.imageUri);
 
     if (!deployResult.success) {
@@ -165,6 +178,7 @@ export async function runDeployPipeline(
           maxInstances: 10,
           allowUnauthenticated: project.config?.allowUnauthenticated ?? false,
           port,
+          cloudSqlInstance,
         }, buildResult.imageUri);
       }
     }
@@ -174,6 +188,8 @@ export async function runDeployPipeline(
       serviceUrl: deployResult.serviceUrl,
       duration: `${(deployResult.duration / 1000).toFixed(1)}s`,
       envVarsSet: Object.keys(finalEnvVars),
+      envVarsMissing: envDetection.missing,
+      envWarnings: envDetection.warnings.length,
     });
 
     // ─── Step 5: Custom domain setup (if configured) ───

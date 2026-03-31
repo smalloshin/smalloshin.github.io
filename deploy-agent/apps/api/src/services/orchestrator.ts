@@ -207,6 +207,18 @@ export async function getDeploymentsByProject(projectId: string): Promise<Deploy
   return result.rows.map(rowToDeployment);
 }
 
+export async function updateProjectConfig(
+  projectId: string,
+  config: Record<string, unknown>,
+): Promise<Project> {
+  const result = await query(
+    `UPDATE projects SET config = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+    [JSON.stringify(config), projectId]
+  );
+  if (result.rows.length === 0) throw new Error(`Project not found: ${projectId}`);
+  return rowToProject(result.rows[0]);
+}
+
 export async function deleteProjectFromDb(projectId: string): Promise<void> {
   // ON DELETE CASCADE handles scan_reports, reviews, deployments, state_transitions
   await query('DELETE FROM projects WHERE id = $1', [projectId]);

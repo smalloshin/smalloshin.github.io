@@ -4,12 +4,24 @@
 // Strategy:
 // 1. Read .env.example / .env.sample / .env.template for declared vars
 // 2. Scan source code for process.env.* / os.environ.get() references
-// 3. Apply framework-specific rules (NextAuth, Prisma, etc.)
-// 4. Merge with user-provided env vars (user values take priority)
+// 3. Scan Dockerfile for ENV declarations
+// 4. Detect hardcoded fallbacks (process.env.KEY || 'literal')
+// 5. Apply framework-specific rules (NextAuth, Prisma, etc.)
+// 6. Auto-generate CloudSQL connection strings when applicable
+// 7. Merge with user-provided env vars (user values take priority)
 
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+
+export interface EnvWarning {
+  type: 'weak_fallback' | 'hardcoded_secret' | 'hardcoded_credential';
+  file: string;
+  line: number;
+  variable: string;
+  fallbackValue: string;
+  recommendation: string;
+}
 
 export interface EnvDetectionResult {
   /** Auto-detected env vars with values */
@@ -18,6 +30,8 @@ export interface EnvDetectionResult {
   missing: string[];
   /** Human-readable notes about what was detected */
   notes: string[];
+  /** Security warnings about weak fallbacks and hardcoded credentials */
+  warnings: EnvWarning[];
 }
 
 interface DetectionContext {
@@ -28,7 +42,16 @@ interface DetectionContext {
   cloudRunUrl?: string;
   gcpProject?: string;
   gcpRegion?: string;
+  projectSlug?: string;
   port: number;
+}
+
+/** Info extracted from a hardcoded fallback in source code */
+interface FallbackInfo {
+  variable: string;
+  fallbackValue: string;
+  file: string;
+  line: number;
 }
 
 // ─── Main entry ───
@@ -37,43 +60,134 @@ export function detectEnvVars(ctx: DetectionContext): EnvDetectionResult {
   const detected: Record<string, string> = {};
   const missing: string[] = [];
   const notes: string[] = [];
+  const warnings: EnvWarning[] = [];
 
   // 1. Scan source code for process.env references
   const referenced = scanSourceForEnvRefs(ctx.projectDir, ctx.language);
   notes.push(`Found ${referenced.size} env var references in source code`);
 
-  // 2. Read .env.example for declared vars with example values
-  const exampleVars = readEnvExample(ctx.projectDir);
-  for (const [key, val] of Object.entries(exampleVars)) {
-    if (val && !isPlaceholder(val)) {
-      detected[key] = val;
+  // 2. Read actual .env files (smart filtering: keep production-suitable, replace dev values)
+  const dotEnvVars = readDotEnvFiles(ctx.projectDir);
+  if (Object.keys(dotEnvVars).length > 0) {
+    notes.push(`Found .env file with ${Object.keys(dotEnvVars).length} vars — applying smart filter`);
+    for (const [key, val] of Object.entries(dotEnvVars)) {
+      referenced.add(key);
+      const classification = classifyEnvValue(key, val, ctx);
+      if (classification === 'keep') {
+        detected[key] = val;
+        notes.push(`.env keep: ${key} (production-suitable value)`);
+      } else if (classification === 'replace') {
+        // Try to rewrite .run.app URLs to use custom domain (preserve path)
+        if (ctx.customDomain && /\.run\.app/.test(val)) {
+          try {
+            const parsed = new URL(val);
+            const rewritten = `https://${ctx.customDomain}${parsed.pathname}${parsed.search}`;
+            detected[key] = rewritten;
+            notes.push(`.env rewrite: ${key} — .run.app → ${ctx.customDomain} (kept path: ${parsed.pathname})`);
+          } catch {
+            notes.push(`.env replace: ${key} — "${val}" is dev/local, will auto-generate`);
+          }
+        } else {
+          // Don't set in detected — let framework/common rules generate proper value
+          notes.push(`.env replace: ${key} — "${val}" is dev/local, will auto-generate`);
+        }
+      } else if (classification === 'weak') {
+        // Will be handled by framework rules with strong auto-generated value
+        notes.push(`.env weak: ${key} — secret too weak, will auto-generate`);
+        warnings.push({
+          type: 'weak_fallback',
+          file: '.env',
+          line: 0,
+          variable: key,
+          fallbackValue: val,
+          recommendation: `Value from .env is too weak for production — auto-generating strong replacement`,
+        });
+      }
     }
   }
 
-  // 3. Framework-specific detection
+  // 3. Read .env.example for declared vars with example values
+  const exampleVars = readEnvExample(ctx.projectDir);
+  for (const [key, val] of Object.entries(exampleVars)) {
+    if (val && !isPlaceholder(val)) {
+      // Only use if not already set from .env
+      if (!detected[key]) {
+        detected[key] = val;
+      }
+    }
+  }
+
+  // 4. Scan Dockerfile for ENV declarations
+  const dockerEnvVars = scanDockerfileEnvVars(ctx.projectDir);
+  for (const [key, val] of Object.entries(dockerEnvVars)) {
+    // Always add to referenced so framework rules see it
+    referenced.add(key);
+    if (!detected[key]) {
+      if (val && !isPlaceholder(val) && !isDockerBuildDummy(key, val)) {
+        detected[key] = val;
+        notes.push(`Dockerfile ENV: ${key}=${val}`);
+      } else if (val) {
+        // Placeholder value — add to referenced so it gets resolved or marked missing
+        notes.push(`Dockerfile ENV: ${key} has placeholder value "${val}" — needs real value`);
+      }
+    }
+  }
+
+  // 5. Detect hardcoded fallbacks in source code
+  const fallbacks = scanHardcodedFallbacks(ctx.projectDir, ctx.language);
+  for (const fb of fallbacks) {
+    referenced.add(fb.variable);
+    if (isWeakSecret(fb.variable, fb.fallbackValue)) {
+      warnings.push({
+        type: isSecretVar(fb.variable) ? 'hardcoded_secret' : 'weak_fallback',
+        file: fb.file,
+        line: fb.line,
+        variable: fb.variable,
+        fallbackValue: fb.fallbackValue,
+        recommendation: `Auto-generating strong replacement for ${fb.variable}`,
+      });
+      // Auto-generate a strong replacement (don't use the weak fallback)
+      if (!detected[fb.variable]) {
+        detected[fb.variable] = generateStrongValue(fb.variable);
+        notes.push(`Auto-replaced weak fallback for ${fb.variable} (was: "${fb.fallbackValue}")`);
+      }
+    } else if (isUrlValue(fb.fallbackValue)) {
+      // URL fallback — note it as a default
+      if (!detected[fb.variable]) {
+        detected[fb.variable] = fb.fallbackValue;
+        notes.push(`Using URL fallback for ${fb.variable}: ${fb.fallbackValue}`);
+      }
+    } else if (fb.fallbackValue && !detected[fb.variable]) {
+      // Other non-empty fallback — use it as default
+      detected[fb.variable] = fb.fallbackValue;
+      notes.push(`Using hardcoded fallback for ${fb.variable}: "${fb.fallbackValue}"`);
+    }
+  }
+
+  // 6. Framework-specific detection
   if (ctx.framework === 'nextjs') {
     applyNextjsRules(ctx, detected, missing, notes, referenced);
   }
 
-  // 4. Common patterns (any framework)
-  applyCommonRules(ctx, detected, missing, notes, referenced);
+  // 7. Common patterns (any framework)
+  applyCommonRules(ctx, detected, missing, notes, referenced, warnings);
 
-  // 5. PORT — always set to match Cloud Run container port
+  // 8. PORT — always set to match Cloud Run container port
   detected['PORT'] = String(ctx.port);
 
-  // 6. NODE_ENV
+  // 8. NODE_ENV
   if (referenced.has('NODE_ENV') || ctx.language === 'typescript' || ctx.language === 'javascript') {
     detected['NODE_ENV'] = 'production';
   }
 
-  // 7. Collect vars referenced but not resolved
+  // 9. Collect vars referenced but not resolved
   for (const ref of referenced) {
     if (!detected[ref] && !missing.includes(ref) && !isIgnoredVar(ref)) {
       missing.push(ref);
     }
   }
 
-  return { detected, missing, notes };
+  return { detected, missing, notes, warnings };
 }
 
 // ─── Merge detected + user-provided env vars ───
@@ -130,6 +244,177 @@ function scanSourceForEnvRefs(projectDir: string, language: string): Set<string>
   return refs;
 }
 
+// ─── Dockerfile ENV scanning ───
+
+function scanDockerfileEnvVars(projectDir: string): Record<string, string> {
+  const vars: Record<string, string> = {};
+  const dockerfiles = ['Dockerfile', 'Dockerfile.production', 'Dockerfile.prod'];
+
+  for (const df of dockerfiles) {
+    const content = safeRead(path.join(projectDir, df));
+    if (!content) continue;
+
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      // Match ENV KEY=value or ENV KEY value
+      // Supports: ENV KEY=value, ENV KEY="value", ENV KEY='value', ENV KEY value
+      const envMatch = trimmed.match(/^ENV\s+([A-Z_][A-Z0-9_]*)(?:\s*=\s*|\s+)(.+)?$/i);
+      if (envMatch) {
+        const key = envMatch[1];
+        let val = (envMatch[2] ?? '').trim();
+        // Strip surrounding quotes
+        val = val.replace(/^['"]|['"]$/g, '');
+        vars[key] = val;
+      }
+    }
+    break; // Use first Dockerfile found
+  }
+
+  return vars;
+}
+
+// ─── Hardcoded fallback detection ───
+
+function scanHardcodedFallbacks(projectDir: string, language: string): FallbackInfo[] {
+  const fallbacks: FallbackInfo[] = [];
+
+  if (language !== 'typescript' && language !== 'javascript') {
+    return fallbacks;
+  }
+
+  const extensions = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
+
+  try {
+    walkFiles(projectDir, extensions, (filePath) => {
+      const content = safeRead(filePath);
+      if (!content) return;
+
+      const lines = content.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        // Match: process.env.KEY || 'literal'  or  process.env.KEY ?? 'literal'
+        // Also: process.env.KEY || "literal"  or  process.env.KEY ?? "literal"
+        const pattern = /process\.env\.([A-Z_][A-Z0-9_]*)\s*(?:\|\||&&|\?\?)\s*(?:process\.env\.[A-Z_][A-Z0-9_]*\s*(?:\|\||\?\?)\s*)?['"]([^'"]+)['"]/g;
+        let match;
+        while ((match = pattern.exec(line)) !== null) {
+          fallbacks.push({
+            variable: match[1],
+            fallbackValue: match[2],
+            file: path.relative(projectDir, filePath),
+            line: i + 1,
+          });
+        }
+      }
+    });
+  } catch {
+    // Ignore errors during scanning
+  }
+
+  return fallbacks;
+}
+
+// ─── .env.example parser ───
+
+// ─── Actual .env file reader (smart filtering) ───
+
+function readDotEnvFiles(projectDir: string): Record<string, string> {
+  // Priority: .env.production > .env.local > .env
+  const envFiles = ['.env.production', '.env.production.local', '.env.local', '.env'];
+  const vars: Record<string, string> = {};
+
+  for (const f of envFiles) {
+    const content = safeRead(path.join(projectDir, f));
+    if (!content) continue;
+
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx === -1) continue;
+
+      const key = trimmed.slice(0, eqIdx).trim();
+      let val = trimmed.slice(eqIdx + 1).trim();
+      // Strip surrounding quotes
+      val = val.replace(/^['"]|['"]$/g, '');
+      if (key && !vars[key]) vars[key] = val;  // First found wins (production > local > default)
+    }
+  }
+
+  return vars;
+}
+
+/**
+ * Classify a .env value for production deployment:
+ * - 'keep':    Value is suitable for production (real API keys, external URLs, etc.)
+ * - 'replace': Value is localhost/dev and should be replaced with production value
+ * - 'weak':    Value is a secret but too weak for production
+ */
+function classifyEnvValue(key: string, val: string, ctx: DetectionContext): 'keep' | 'replace' | 'weak' {
+  const upper = key.toUpperCase();
+
+  // 1. Empty or placeholder → replace
+  if (!val || isPlaceholder(val)) return 'replace';
+
+  // 2. URL-type vars: replace if pointing to localhost
+  const isUrlVar = ['_URL', '_HOST', '_ORIGIN', '_ENDPOINT', '_CALLBACK', '_REDIRECT'].some((p) => upper.includes(p));
+  if (isUrlVar) {
+    // Localhost/dev → always replace
+    if (/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(val)) {
+      return 'replace';
+    }
+    // Old Cloud Run URL for THIS app (self-referencing) → replace with custom domain
+    // But keep URLs to OTHER Cloud Run services (external dependencies)
+    if (ctx.customDomain && /\.run\.app/.test(val)) {
+      // "Self-referencing" heuristic: the URL var name suggests it's this app's own URL
+      // (NEXTAUTH_URL, REDIRECT_URI, CALLBACK_URL, APP_URL, BASE_URL, SITE_URL)
+      const selfRefVars = ['NEXTAUTH_URL', 'APP_URL', 'BASE_URL', 'SITE_URL', 'PUBLIC_URL'];
+      const isSelfRef = selfRefVars.includes(key);
+      const isRedirectVar = upper.includes('REDIRECT') || upper.includes('CALLBACK');
+      if (isSelfRef || isRedirectVar) {
+        return 'replace';
+      }
+      // Other URLs pointing to .run.app are likely external services → keep
+    }
+  }
+
+  // 3. DATABASE_URL pointing to localhost or docker → replace (we have CloudSQL)
+  //    But keep real external DB connections (actual IPs, Cloud SQL proxy, etc.)
+  if (upper.includes('DATABASE') || upper.includes('REDIS') || upper.includes('MONGO')) {
+    if (/localhost|127\.0\.0\.1|host\.docker\.internal/.test(val)) {
+      return 'replace';
+    }
+    if (isPlaceholder(val) || val === 'postgresql://placeholder') {
+      return 'replace';
+    }
+    // Real external connection (has IP or hostname) → keep
+    return 'keep';
+  }
+
+  // 4. Secret/key vars — check if value is strong enough for production
+  //    But exclude user-facing credentials (AUTH_USERNAME, AUTH_PASSWORD etc.)
+  //    which are intentionally set by users and not auto-generated secrets
+  if (isSecretVar(key) && !isUserCredentialVar(key)) {
+    if (isWeakSecret(key, val)) return 'weak';
+  }
+
+  // 5. NODE_ENV=development → replace
+  if (upper === 'NODE_ENV' && val !== 'production') return 'replace';
+
+  // 6. Everything else → keep (real API keys, external service URLs, user config, etc.)
+  return 'keep';
+}
+
+/** Check if a variable is a user-facing credential (not a machine-generated secret) */
+function isUserCredentialVar(name: string): boolean {
+  const upper = name.toUpperCase();
+  // These are user/admin credentials that are intentionally chosen, not auto-generated
+  return /^AUTH_(USERNAME|PASSWORD|USER|EMAIL)$/.test(upper) ||
+    /^ADMIN_(USERNAME|PASSWORD|USER|EMAIL)$/.test(upper) ||
+    upper === 'USERNAME' || upper === 'PASSWORD';
+}
+
 // ─── .env.example parser ───
 
 function readEnvExample(projectDir: string): Record<string, string> {
@@ -176,12 +461,15 @@ function applyNextjsRules(
     notes.push(`NextAuth detected → NEXTAUTH_URL=${baseUrl}`);
 
     if (referenced.has('NEXTAUTH_SECRET') || referenced.has('AUTH_SECRET')) {
-      const secret = crypto.randomBytes(32).toString('base64url');
-      detected['NEXTAUTH_SECRET'] = secret;
-      if (referenced.has('AUTH_SECRET')) {
-        detected['AUTH_SECRET'] = secret;
+      // Only set if not already detected (e.g., from fallback scanning)
+      if (!detected['NEXTAUTH_SECRET']) {
+        const secret = crypto.randomBytes(32).toString('base64url');
+        detected['NEXTAUTH_SECRET'] = secret;
+        notes.push('Generated NEXTAUTH_SECRET (random 32 bytes)');
       }
-      notes.push('Generated NEXTAUTH_SECRET (random 32 bytes)');
+      if (referenced.has('AUTH_SECRET') && !detected['AUTH_SECRET']) {
+        detected['AUTH_SECRET'] = detected['NEXTAUTH_SECRET'];
+      }
     }
   }
 
@@ -189,6 +477,24 @@ function applyNextjsRules(
   if (referenced.has('JWT_SECRET') && !detected['JWT_SECRET']) {
     detected['JWT_SECRET'] = crypto.randomBytes(32).toString('base64url');
     notes.push('Generated JWT_SECRET (random 32 bytes)');
+  }
+
+  // Rewrite callback/redirect URLs from old .run.app to custom domain
+  if (ctx.customDomain) {
+    const redirectVars = ['GOOGLE_REDIRECT_URI', 'OAUTH_CALLBACK_URL', 'REDIRECT_URI', 'CALLBACK_URL'];
+    for (const key of redirectVars) {
+      if (detected[key] && /\.run\.app/.test(detected[key])) {
+        const oldUrl = detected[key];
+        // Extract path from old URL and prepend custom domain
+        try {
+          const parsed = new URL(oldUrl);
+          detected[key] = `https://${ctx.customDomain}${parsed.pathname}${parsed.search}`;
+          notes.push(`Rewrote ${key}: .run.app → ${ctx.customDomain}`);
+        } catch {
+          detected[key] = `https://${ctx.customDomain}`;
+        }
+      }
+    }
   }
 
   // NEXT_PUBLIC_* — these are build-time vars, set them anyway for SSR
@@ -223,13 +529,24 @@ function applyCommonRules(
   missing: string[],
   notes: string[],
   referenced: Set<string>,
+  warnings: EnvWarning[],
 ) {
-  // DATABASE_URL — if referenced, try to construct from GCP project
-  if (referenced.has('DATABASE_URL')) {
-    // Can't auto-detect DB connection — mark as missing
-    if (!detected['DATABASE_URL']) {
-      missing.push('DATABASE_URL');
-      notes.push('DATABASE_URL referenced but cannot be auto-detected — user must provide');
+  // DATABASE_URL and KOL_DATABASE_URL — CloudSQL auto-detection
+  // Use a single connection string for all DB vars (same instance, same DB)
+  const dbVars = ['DATABASE_URL', 'KOL_DATABASE_URL'];
+  const referencedDbVars = dbVars.filter((v) => referenced.has(v) && !detected[v]);
+  if (referencedDbVars.length > 0) {
+    if (ctx.gcpProject && ctx.gcpRegion) {
+      const connectionString = buildCloudSqlConnectionString(ctx);
+      for (const dbVar of referencedDbVars) {
+        detected[dbVar] = connectionString;
+      }
+      notes.push(`${referencedDbVars.join(', ')} auto-generated with CloudSQL Unix socket connection (${ctx.gcpProject}:${ctx.gcpRegion}:deploy-agent-db)`);
+    } else {
+      for (const dbVar of referencedDbVars) {
+        missing.push(dbVar);
+      }
+      notes.push(`${referencedDbVars.join(', ')} referenced but cannot be auto-detected — user must provide`);
     }
   }
 
@@ -293,7 +610,28 @@ function applyCommonRules(
   }
 }
 
+// ─── CloudSQL connection string builder ───
+
+function buildCloudSqlConnectionString(ctx: DetectionContext): string {
+  const gcpProject = ctx.gcpProject!;
+  const gcpRegion = ctx.gcpRegion!;
+  const instanceConnectionName = `${gcpProject}:${gcpRegion}:deploy-agent-db`;
+  const dbName = ctx.projectSlug ?? 'app';
+  const password = process.env.CLOUDSQL_DEPLOY_PASSWORD || crypto.randomBytes(24).toString('base64url');
+
+  return `postgresql://deploy_agent:${password}@/${dbName}?host=/cloudsql/${instanceConnectionName}`;
+}
+
 // ─── Helpers ───
+
+/** Check if a Dockerfile ENV value is a build-time dummy that should be overridden */
+function isDockerBuildDummy(key: string, val: string): boolean {
+  // Secret-like keys with any non-URL value in Dockerfile are almost always build dummies
+  if (isSecretVar(key) && !isUrlValue(val)) return true;
+  // Short single-word values like "build-secret" are dummies
+  if (val.includes('build') || val.includes('dummy') || val === 'http://localhost:3000') return true;
+  return false;
+}
 
 function isPlaceholder(val: string): boolean {
   const lower = val.toLowerCase();
@@ -301,13 +639,73 @@ function isPlaceholder(val: string): boolean {
     lower === 'your_value_here' ||
     lower === 'xxx' ||
     lower === 'changeme' ||
+    lower === 'change_me' ||
     lower === 'replace_me' ||
     lower === 'todo' ||
+    lower === 'build' ||
+    lower === 'placeholder' ||
     lower === '' ||
     lower.startsWith('your_') ||
     lower.startsWith('<') ||
-    lower.endsWith('>')
+    lower.endsWith('>') ||
+    lower.includes('changeme') ||
+    lower.includes('placeholder') ||
+    lower.includes('replace-me') ||
+    lower.includes('replace_me')
   );
+}
+
+/** Check whether a fallback value is a weak/insecure secret */
+function isWeakSecret(variable: string, value: string): boolean {
+  // If the variable name suggests it's a secret and the value is weak
+  if (!isSecretVar(variable)) return false;
+
+  // Short values are weak
+  if (value.length < 16) return true;
+
+  // Low entropy: mostly lowercase letters, digits, and dashes (predictable patterns like "my-app-secret-2026")
+  // Real secrets should have mixed case, special chars, or be base64-encoded
+  const hasUpperCase = /[A-Z]/.test(value);
+  const hasSpecialOrBase64 = /[+/=_]/.test(value);
+  const looksLikeHumanReadable = /^[a-z0-9][a-z0-9\-_.]+$/.test(value);
+  if (looksLikeHumanReadable && value.length < 40) return true;
+
+  // Common weak patterns
+  const weakPatterns = [
+    /^change[_-]?me$/i,
+    /^secret$/i,
+    /^password$/i,
+    /^default$/i,
+    /^test$/i,
+    /^dev$/i,
+    /session[_-]?secret/i,
+    /change[_-]?me/i,
+    /wavenet/i,
+  ];
+  return weakPatterns.some((p) => p.test(value));
+}
+
+/** Check whether a variable name suggests it holds a secret */
+function isSecretVar(name: string): boolean {
+  const secretIndicators = ['SECRET', 'PASSWORD', 'TOKEN', 'KEY', 'CREDENTIAL', 'AUTH'];
+  return secretIndicators.some((ind) => name.toUpperCase().includes(ind));
+}
+
+/** Check whether a value looks like a URL */
+function isUrlValue(value: string): boolean {
+  return /^https?:\/\//.test(value);
+}
+
+/** Generate a strong replacement value for a given variable */
+function generateStrongValue(variable: string): string {
+  const upper = variable.toUpperCase();
+  if (upper.includes('SECRET') || upper.includes('KEY') || upper.includes('TOKEN')) {
+    return crypto.randomBytes(32).toString('base64url');
+  }
+  if (upper.includes('PASSWORD')) {
+    return crypto.randomBytes(24).toString('base64url');
+  }
+  return crypto.randomBytes(32).toString('base64url');
 }
 
 function isIgnoredVar(name: string): boolean {
