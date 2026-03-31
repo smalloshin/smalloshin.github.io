@@ -18,7 +18,7 @@ import {
   updateProjectConfig,
 } from '../services/orchestrator';
 import { runPipeline } from '../services/pipeline-worker';
-import { deleteService, deleteDomainMapping, deleteContainerImage, updateServiceEnvVars } from '../services/deploy-engine';
+import { deleteService, deleteDomainMapping, deleteContainerImage, updateServiceEnvVars, getServiceEnvVars } from '../services/deploy-engine';
 import { deleteCname } from '../services/dns-manager';
 
 const execFileAsync = promisify(execFile);
@@ -445,7 +445,28 @@ export async function projectRoutes(app: FastifyInstance) {
     const project = await getProject(request.params.id);
     if (!project) return reply.status(404).send({ error: 'Project not found' });
 
-    const envVars: Record<string, string> = (project.config?.envVars as Record<string, string>) ?? {};
+    // Try to read live env vars from Cloud Run service first
+    const deployments = await getDeploymentsByProject(project.id);
+    const activeDeployment = deployments.find((d) => d.cloudRunService);
+
+    let envVars: Record<string, string> = {};
+
+    if (activeDeployment?.cloudRunService) {
+      const gcpProject = (project.config?.gcpProject as string) || process.env.GCP_PROJECT || '';
+      const gcpRegion = (project.config?.gcpRegion as string) || process.env.GCP_REGION || 'asia-east1';
+      if (gcpProject) {
+        try {
+          envVars = await getServiceEnvVars(gcpProject, gcpRegion, activeDeployment.cloudRunService);
+        } catch {
+          // Fallback to DB
+          envVars = (project.config?.envVars as Record<string, string>) ?? {};
+        }
+      }
+    } else {
+      // No deployment — use DB config
+      envVars = (project.config?.envVars as Record<string, string>) ?? {};
+    }
+
     const maskedVars = Object.entries(envVars).map(([key, value]) => ({
       key,
       maskedValue: value.length > 3 ? value.slice(0, 3) + '***' : '***',

@@ -573,6 +573,33 @@ export async function updateServiceEnvVars(
   }
 }
 
+/** Read env vars from a live Cloud Run service (values returned as-is). */
+export async function getServiceEnvVars(
+  gcpProject: string,
+  gcpRegion: string,
+  serviceName: string,
+): Promise<Record<string, string>> {
+  const parent = `projects/${gcpProject}/locations/${gcpRegion}`;
+  const serviceUrl = `https://run.googleapis.com/v2/${parent}/services/${serviceName}`;
+
+  const res = await gcpFetch(serviceUrl);
+  if (!res.ok) return {};
+
+  const service = await res.json() as {
+    template?: {
+      containers?: Array<{ env?: Array<{ name: string; value?: string }> }>;
+    };
+  };
+
+  const env: Record<string, string> = {};
+  for (const entry of service.template?.containers?.[0]?.env ?? []) {
+    if (entry.name && entry.value !== undefined) {
+      env[entry.name] = entry.value;
+    }
+  }
+  return env;
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
