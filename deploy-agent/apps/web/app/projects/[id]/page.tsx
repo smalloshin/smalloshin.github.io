@@ -245,31 +245,7 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Scan Report */}
-      {scanReport && (
-        <Card title="掃描報告" style={{ marginTop: 16 }}>
-          <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
-            <InfoRow label="Status" value={scanReport.status} />
-            <InfoRow label="Version" value={String(scanReport.version)} />
-            {scanReport.costEstimate && (
-              <InfoRow label="預估月費" value={`$${scanReport.costEstimate.monthlyTotal.toFixed(2)}/mo`} />
-            )}
-          </div>
-          {scanReport.threatSummary && (
-            <div>
-              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4, textTransform: 'uppercase' }}>
-                威脅摘要 / Review Report
-              </label>
-              <div style={{
-                background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 6,
-                padding: 12, fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 300,
-                overflowY: 'auto', fontFamily: 'monospace',
-              }}>
-                {scanReport.threatSummary}
-              </div>
-            </div>
-          )}
-        </Card>
-      )}
+      {scanReport && <ScanReportSection scanReport={scanReport} projectStatus={project.status} />}
 
       {/* Pipeline Timeline */}
       <Card title="流程時間軸" style={{ marginTop: 16 }}>
@@ -423,6 +399,60 @@ function MetadataBlock({ metadata }: { metadata: Record<string, unknown> }) {
           {key.replace(/([A-Z])/g, ' $1').toLowerCase()}: <strong style={{ color: 'var(--text-primary)' }}>{val === null || val === undefined ? '' : typeof val === 'object' ? JSON.stringify(val) : String(val)}</strong>
         </span>
       ))}
+    </div>
+  );
+}
+
+function ScanReportSection({ scanReport, projectStatus }: { scanReport: ScanReport; projectStatus: string }) {
+  // After approval/deploying/live, default to collapsed; during scanning/review, default to expanded
+  const postReview = ['approved', 'deploying', 'deployed', 'ssl_provisioning', 'canary_check', 'live'].includes(projectStatus);
+  const [expanded, setExpanded] = useState(!postReview);
+
+  return (
+    <div style={{
+      background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8,
+      padding: 16, marginTop: 16,
+    }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <h3 style={{ fontSize: 14, fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: 0.5, margin: 0 }}>
+          {expanded ? '&#x25BC;' : '&#x25B6;'}&nbsp; 掃描報告 / Security Report
+        </h3>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <span className={`pill ${scanReport.status === 'completed' ? 'pill-live' : scanReport.status === 'scanning' ? 'pill-scanning' : 'pill-review'}`}>
+            {scanReport.status}
+          </span>
+          {scanReport.costEstimate && (
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              ~${scanReport.costEstimate.monthlyTotal.toFixed(2)}/mo
+            </span>
+          )}
+        </div>
+      </div>
+
+      {expanded && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
+            <InfoRow label="Version" value={String(scanReport.version)} />
+          </div>
+          {scanReport.threatSummary && (
+            <div>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4, textTransform: 'uppercase' }}>
+                威脅摘要 / Review Report
+              </label>
+              <div style={{
+                background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 6,
+                padding: 12, fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 400,
+                overflowY: 'auto', fontFamily: 'monospace',
+              }}>
+                {scanReport.threatSummary}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

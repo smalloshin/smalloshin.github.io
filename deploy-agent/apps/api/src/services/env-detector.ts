@@ -319,8 +319,6 @@ function scanHardcodedFallbacks(projectDir: string, language: string): FallbackI
 // ─── Actual .env file reader (smart filtering) ───
 
 function readDotEnvFiles(projectDir: string): Record<string, string> {
-  const fs = require('fs') as typeof import('fs');
-
   // Priority 1: well-known .env files (production > local > default)
   const knownEnvFiles = ['.env.production', '.env.production.local', '.env.local', '.env'];
 
