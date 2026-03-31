@@ -20,6 +20,7 @@ interface Project {
     allowUnauthenticated?: boolean;
     gcpProject?: string;
     gcpRegion?: string;
+    envVars?: Record<string, string>;
   };
   createdAt: string;
   updatedAt: string;
@@ -94,6 +95,7 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [showEnvEditor, setShowEnvEditor] = useState(false);
 
   const loadDetail = (silent = false) => {
     if (!silent) setLoading(true);
@@ -268,6 +270,15 @@ export default function ProjectDetailPage() {
           )}
         </Card>
       </div>
+
+      {/* Environment Variables */}
+      {deployments.length > 0 && (
+        <EnvVarsSection
+          projectId={project.id}
+          expanded={showEnvEditor}
+          onToggle={() => setShowEnvEditor(!showEnvEditor)}
+        />
+      )}
 
       {/* Scan Report */}
       {scanReport && <ScanReportSection scanReport={scanReport} projectStatus={project.status} />}
@@ -649,6 +660,299 @@ function AutoFixCard({ fix }: { fix: AutoFixRecord }) {
               color: 'var(--text-secondary)', maxHeight: 200,
             }}>{fix.diff}</pre>
           ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Environment Variables Section ─── */
+
+interface EnvEntry {
+  key: string;
+  value: string;
+  isNew?: boolean;
+}
+
+function EnvVarsSection({ projectId, expanded, onToggle }: {
+  projectId: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const [envVars, setEnvVars] = useState<{ key: string; maskedValue: string }[]>([]);
+  const [loadingEnv, setLoadingEnv] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editEntries, setEditEntries] = useState<EnvEntry[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [deleteKeys, setDeleteKeys] = useState<Set<string>>(new Set());
+
+  const loadEnvVars = () => {
+    setLoadingEnv(true);
+    fetch(`${API}/api/projects/${projectId}/env-vars`)
+      .then(r => r.json())
+      .then(d => {
+        setEnvVars(d.envVars ?? []);
+        setLoadingEnv(false);
+      })
+      .catch(() => setLoadingEnv(false));
+  };
+
+  useEffect(() => {
+    if (expanded) loadEnvVars();
+  }, [expanded]);
+
+  const startEditing = () => {
+    setEditEntries(envVars.map(v => ({ key: v.key, value: '', isNew: false })));
+    setDeleteKeys(new Set());
+    setEditing(true);
+    setSaveMsg(null);
+  };
+
+  const cancelEditing = () => {
+    setEditing(false);
+    setEditEntries([]);
+    setDeleteKeys(new Set());
+    setSaveMsg(null);
+  };
+
+  const addEntry = () => {
+    setEditEntries([...editEntries, { key: '', value: '', isNew: true }]);
+  };
+
+  const removeEntry = (idx: number) => {
+    const entry = editEntries[idx];
+    if (!entry.isNew) {
+      // Mark existing var for deletion by setting empty value
+      setDeleteKeys(prev => new Set(prev).add(entry.key));
+    }
+    setEditEntries(editEntries.filter((_, i) => i !== idx));
+  };
+
+  const updateEntry = (idx: number, field: 'key' | 'value', val: string) => {
+    const updated = [...editEntries];
+    updated[idx] = { ...updated[idx], [field]: val };
+    setEditEntries(updated);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveMsg(null);
+
+    // Build envVars object: only send entries with non-empty values (changed/new)
+    const envVarsObj: Record<string, string> = {};
+    for (const entry of editEntries) {
+      if (!entry.key.trim()) continue;
+      if (entry.value.trim() || entry.isNew) {
+        envVarsObj[entry.key.trim()] = entry.value;
+      }
+    }
+
+    if (Object.keys(envVarsObj).length === 0 && deleteKeys.size === 0) {
+      setSaveMsg({ type: 'error', text: '請至少修改一個環境變數的值 / Please change at least one value' });
+      setSaving(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API}/api/projects/${projectId}/env-vars`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ envVars: envVarsObj }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed to update');
+      setSaveMsg({ type: 'success', text: `已更新 ${data.updatedKeys?.length ?? 0} 個環境變數，Cloud Run 服務已同步` });
+      setEditing(false);
+      loadEnvVars();
+    } catch (err) {
+      setSaveMsg({ type: 'error', text: (err as Error).message });
+    }
+    setSaving(false);
+  };
+
+  const RESERVED_VARS = new Set(['PORT', 'K_SERVICE', 'K_REVISION', 'K_CONFIGURATION']);
+
+  return (
+    <div style={{
+      background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8,
+      padding: 16, marginTop: 16,
+    }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+        onClick={onToggle}
+      >
+        <h3 style={{ fontSize: 14, fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: 0.5, margin: 0 }}>
+          {expanded ? '\u25BC' : '\u25B6'}&nbsp; 環境變數 / Environment Variables
+        </h3>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+          {envVars.length} vars
+        </span>
+      </div>
+
+      {expanded && (
+        <div style={{ marginTop: 12 }}>
+          {loadingEnv ? (
+            <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>載入中...</p>
+          ) : (
+            <>
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                {!editing ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); startEditing(); }}
+                    style={{
+                      padding: '5px 14px', fontSize: 12, borderRadius: 6, border: '1px solid var(--accent)',
+                      background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
+                      fontWeight: 500,
+                    }}
+                  >
+                    編輯環境變數
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleSave(); }}
+                      disabled={saving}
+                      style={{
+                        padding: '5px 14px', fontSize: 12, borderRadius: 6, border: 'none',
+                        background: 'var(--accent)', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer',
+                        fontWeight: 500, opacity: saving ? 0.6 : 1,
+                      }}
+                    >
+                      {saving ? '儲存中...' : '儲存並部署'}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); cancelEditing(); }}
+                      style={{
+                        padding: '5px 14px', fontSize: 12, borderRadius: 6,
+                        border: '1px solid var(--border)', background: 'transparent',
+                        color: 'var(--text-secondary)', cursor: 'pointer',
+                      }}
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); addEntry(); }}
+                      style={{
+                        padding: '5px 14px', fontSize: 12, borderRadius: 6,
+                        border: '1px solid var(--border)', background: 'transparent',
+                        color: 'var(--status-live)', cursor: 'pointer', marginLeft: 'auto',
+                      }}
+                    >
+                      + 新增變數
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Status message */}
+              {saveMsg && (
+                <div style={{
+                  padding: '8px 12px', borderRadius: 6, marginBottom: 12, fontSize: 13,
+                  background: saveMsg.type === 'success' ? 'rgba(63,185,80,0.1)' : 'rgba(248,81,73,0.1)',
+                  border: `1px solid ${saveMsg.type === 'success' ? 'rgba(63,185,80,0.3)' : 'rgba(248,81,73,0.3)'}`,
+                  color: saveMsg.type === 'success' ? 'var(--status-live)' : 'var(--status-critical)',
+                }}>
+                  {saveMsg.text}
+                </div>
+              )}
+
+              {/* Env vars table */}
+              {!editing ? (
+                /* Read-only view */
+                <div style={{
+                  background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 6,
+                  overflow: 'hidden',
+                }}>
+                  {envVars.length === 0 ? (
+                    <p style={{ padding: 12, color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>
+                      尚無環境變數 / No environment variables set
+                    </p>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                          <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Key</th>
+                          <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {envVars.map((v, i) => (
+                          <tr key={i} style={{ borderBottom: i < envVars.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                            <td style={{ padding: '6px 12px', fontFamily: 'monospace', fontSize: 12, color: 'var(--text-primary)' }}>{v.key}</td>
+                            <td style={{ padding: '6px 12px', fontFamily: 'monospace', fontSize: 12, color: 'var(--text-secondary)' }}>{v.maskedValue}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              ) : (
+                /* Edit mode */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {editEntries.map((entry, i) => {
+                    const isReserved = RESERVED_VARS.has(entry.key.toUpperCase());
+                    return (
+                      <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          value={entry.key}
+                          onChange={(e) => updateEntry(i, 'key', e.target.value)}
+                          placeholder="KEY"
+                          readOnly={!entry.isNew}
+                          style={{
+                            flex: '0 0 220px', padding: '6px 10px', fontSize: 12, fontFamily: 'monospace',
+                            background: entry.isNew ? 'var(--bg-primary)' : 'var(--bg-tertiary, var(--bg-secondary))',
+                            border: `1px solid ${isReserved ? 'var(--status-critical)' : 'var(--border)'}`,
+                            borderRadius: 4, color: 'var(--text-primary)',
+                            opacity: entry.isNew ? 1 : 0.8,
+                          }}
+                        />
+                        <input
+                          type="text"
+                          value={entry.value}
+                          onChange={(e) => updateEntry(i, 'value', e.target.value)}
+                          placeholder={entry.isNew ? 'value' : '(留空 = 不修改 / leave empty = no change)'}
+                          style={{
+                            flex: 1, padding: '6px 10px', fontSize: 12, fontFamily: 'monospace',
+                            background: 'var(--bg-primary)', border: '1px solid var(--border)',
+                            borderRadius: 4, color: 'var(--text-primary)',
+                          }}
+                        />
+                        <button
+                          onClick={() => removeEntry(i)}
+                          title="移除"
+                          style={{
+                            width: 28, height: 28, borderRadius: 4, border: '1px solid var(--border)',
+                            background: 'transparent', color: 'var(--status-critical)',
+                            cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', flexShrink: 0,
+                          }}
+                        >
+                          &times;
+                        </button>
+                        {isReserved && (
+                          <span style={{ fontSize: 10, color: 'var(--status-critical)', flexShrink: 0 }}>
+                            reserved
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {editEntries.length === 0 && (
+                    <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+                      點擊「+ 新增變數」來新增環境變數
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <p style={{ marginTop: 8, fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                修改後會直接更新 Cloud Run 服務（不需重新建置映像檔）。留空的值不會被修改。
+              </p>
+            </>
+          )}
         </div>
       )}
     </div>
