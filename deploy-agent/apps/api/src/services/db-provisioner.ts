@@ -97,6 +97,11 @@ export async function provisionProjectDatabase(
           console.log(`[DB] User ${dbUser} exists, reset password`);
         }
 
+        // Grant the new role to the current (admin) user so we can set OWNER
+        // PostgreSQL requires membership in the target role to assign ownership
+        const currentUser = (await client.query(`SELECT current_user`)).rows[0].current_user;
+        await client.query(`GRANT "${dbUser}" TO "${currentUser}"`);
+
         // Create database owned by the new user
         await client.query(`CREATE DATABASE "${dbName}" OWNER "${dbUser}"`);
         console.log(`[DB] Created database: ${dbName}`);
