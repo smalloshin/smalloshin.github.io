@@ -255,16 +255,39 @@ function rowToProject(row: Record<string, unknown>): Project {
 }
 
 function rowToScanReport(row: Record<string, unknown>): ScanReport {
+  // Parse findings from DB JSON columns
+  const semgrepFindings = parseJsonField(row.semgrep_findings) as Array<Record<string, unknown>> ?? [];
+  const trivyFindings = parseJsonField(row.trivy_findings) as Array<Record<string, unknown>> ?? [];
+  const llmAnalysis = parseJsonField(row.llm_analysis) as { findings?: Array<Record<string, unknown>>; summary?: string } | null;
+  const autoFixes = parseJsonField(row.auto_fixes) as Array<Record<string, unknown>> ?? [];
+
+  // Merge all findings into one list
+  const allFindings = [
+    ...semgrepFindings,
+    ...trivyFindings,
+    ...(llmAnalysis?.findings ?? []),
+  ];
+
   return {
     id: row.id as string,
     projectId: row.project_id as string,
     version: row.version as number,
-    findings: [],
+    findings: allFindings as unknown as ScanReport['findings'],
+    autoFixes: (autoFixes ?? []) as unknown as ScanReport['autoFixes'],
     threatSummary: (row.threat_summary as string) ?? '',
     costEstimate: row.cost_estimate as ScanReport['costEstimate'],
     status: row.status as ScanReport['status'],
     createdAt: new Date(row.created_at as string),
   };
+}
+
+function parseJsonField(val: unknown): unknown {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'object') return val; // already parsed by pg driver
+  if (typeof val === 'string') {
+    try { return JSON.parse(val); } catch { return null; }
+  }
+  return null;
 }
 
 function rowToReview(row: Record<string, unknown>): Review {

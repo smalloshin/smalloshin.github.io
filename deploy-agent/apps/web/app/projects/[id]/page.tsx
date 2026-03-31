@@ -34,10 +34,33 @@ interface TimelineEntry {
   createdAt: string;
 }
 
+interface ScanFinding {
+  id: string;
+  tool: string;
+  category: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  title: string;
+  description: string;
+  filePath: string;
+  lineStart: number;
+  lineEnd: number;
+  action: 'auto_fix' | 'report_only';
+}
+
+interface AutoFixRecord {
+  findingId?: string;
+  filePath: string;
+  originalCode: string;
+  fixedCode: string;
+  explanation: string;
+}
+
 interface ScanReport {
   id: string;
   projectId: string;
   version: number;
+  findings: ScanFinding[];
+  autoFixes: AutoFixRecord[];
   threatSummary: string;
   costEstimate: { monthlyTotal: number; breakdown: { compute: number; storage: number; networking: number; ssl: number } } | null;
   status: string;
@@ -408,6 +431,13 @@ function ScanReportSection({ scanReport, projectStatus }: { scanReport: ScanRepo
   const postReview = ['approved', 'deploying', 'deployed', 'ssl_provisioning', 'canary_check', 'live'].includes(projectStatus);
   const [expanded, setExpanded] = useState(!postReview);
 
+  const findings = scanReport.findings ?? [];
+  const autoFixes = scanReport.autoFixes ?? [];
+  const criticalCount = findings.filter(f => f.severity === 'critical').length;
+  const highCount = findings.filter(f => f.severity === 'high').length;
+  const mediumCount = findings.filter(f => f.severity === 'medium').length;
+  const lowCount = findings.filter(f => f.severity === 'low').length;
+
   return (
     <div style={{
       background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8,
@@ -418,9 +448,15 @@ function ScanReportSection({ scanReport, projectStatus }: { scanReport: ScanRepo
         onClick={() => setExpanded(!expanded)}
       >
         <h3 style={{ fontSize: 14, fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: 0.5, margin: 0 }}>
-          {expanded ? '&#x25BC;' : '&#x25B6;'}&nbsp; 掃描報告 / Security Report
+          {expanded ? '\u25BC' : '\u25B6'}&nbsp; 掃描報告 / Security Report
         </h3>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {findings.length > 0 && (
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              {findings.length} findings
+              {autoFixes.length > 0 && ` (${autoFixes.length} auto-fixed)`}
+            </span>
+          )}
           <span className={`pill ${scanReport.status === 'completed' ? 'pill-live' : scanReport.status === 'scanning' ? 'pill-scanning' : 'pill-review'}`}>
             {scanReport.status}
           </span>
@@ -434,23 +470,167 @@ function ScanReportSection({ scanReport, projectStatus }: { scanReport: ScanRepo
 
       {expanded && (
         <div style={{ marginTop: 12 }}>
-          <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
-            <InfoRow label="Version" value={String(scanReport.version)} />
-          </div>
+          {/* Severity summary bar */}
+          {findings.length > 0 && (
+            <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+              {criticalCount > 0 && <SeverityBadge severity="critical" count={criticalCount} />}
+              {highCount > 0 && <SeverityBadge severity="high" count={highCount} />}
+              {mediumCount > 0 && <SeverityBadge severity="medium" count={mediumCount} />}
+              {lowCount > 0 && <SeverityBadge severity="low" count={lowCount} />}
+            </div>
+          )}
+
+          {/* Threat summary */}
           {scanReport.threatSummary && (
-            <div>
+            <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4, textTransform: 'uppercase' }}>
                 威脅摘要 / Review Report
               </label>
               <div style={{
                 background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 6,
-                padding: 12, fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 400,
+                padding: 12, fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 300,
                 overflowY: 'auto', fontFamily: 'monospace',
               }}>
                 {scanReport.threatSummary}
               </div>
             </div>
           )}
+
+          {/* Findings list */}
+          {findings.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase' }}>
+                安全性問題 / Security Findings ({findings.length})
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {findings.map((f, i) => (
+                  <FindingCard key={f.id || i} finding={f} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Auto-fixes list */}
+          {autoFixes.length > 0 && (
+            <div>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase' }}>
+                自動修復 / Auto-Fixes ({autoFixes.length})
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {autoFixes.map((fix, i) => (
+                  <AutoFixCard key={i} fix={fix} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {findings.length === 0 && !scanReport.threatSummary && (
+            <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>掃描進行中... / Scanning in progress...</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SEVERITY_COLORS: Record<string, string> = {
+  critical: '#f85149',
+  high: '#db6d28',
+  medium: '#d29922',
+  low: '#8b949e',
+};
+
+function SeverityBadge({ severity, count }: { severity: string; count: number }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 10px',
+      borderRadius: 12, fontSize: 12, fontWeight: 600,
+      background: `${SEVERITY_COLORS[severity]}20`,
+      color: SEVERITY_COLORS[severity],
+      border: `1px solid ${SEVERITY_COLORS[severity]}40`,
+    }}>
+      {count} {severity}
+    </span>
+  );
+}
+
+function FindingCard({ finding }: { finding: ScanFinding }) {
+  const [showDetail, setShowDetail] = useState(false);
+  const color = SEVERITY_COLORS[finding.severity] ?? '#8b949e';
+
+  return (
+    <div style={{
+      background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 6,
+      padding: '10px 12px', cursor: 'pointer',
+    }} onClick={() => setShowDetail(!showDetail)}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{
+          display: 'inline-block', padding: '1px 6px', borderRadius: 4,
+          fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+          background: `${color}20`, color, border: `1px solid ${color}40`,
+        }}>
+          {finding.severity}
+        </span>
+        <span style={{
+          display: 'inline-block', padding: '1px 6px', borderRadius: 4,
+          fontSize: 10, background: 'var(--bg-secondary)', color: 'var(--text-secondary)',
+          border: '1px solid var(--border)',
+        }}>
+          {finding.tool}
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', flex: 1 }}>
+          {finding.title}
+        </span>
+        {finding.action === 'auto_fix' && (
+          <span style={{ fontSize: 10, color: 'var(--status-live)', fontWeight: 600 }}>AUTO-FIXED</span>
+        )}
+      </div>
+      {showDetail && (
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+          <p style={{ margin: '0 0 4px' }}>{finding.description}</p>
+          {finding.filePath && (
+            <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--accent)' }}>
+              {finding.filePath}{finding.lineStart ? `:${finding.lineStart}` : ''}
+              {finding.lineEnd && finding.lineEnd !== finding.lineStart ? `-${finding.lineEnd}` : ''}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AutoFixCard({ fix }: { fix: AutoFixRecord }) {
+  const [showDiff, setShowDiff] = useState(false);
+
+  return (
+    <div style={{
+      background: 'rgba(63,185,80,0.05)', border: '1px solid rgba(63,185,80,0.2)', borderRadius: 6,
+      padding: '10px 12px', cursor: 'pointer',
+    }} onClick={() => setShowDiff(!showDiff)}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ color: 'var(--status-live)', fontSize: 12, fontWeight: 600 }}>&#x2714; FIXED</span>
+        <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>{fix.explanation}</span>
+        <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-secondary)' }}>{fix.filePath}</span>
+      </div>
+      {showDiff && (
+        <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 10, color: 'var(--status-critical)', marginBottom: 2, fontWeight: 600 }}>BEFORE</label>
+            <pre style={{
+              background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.2)', borderRadius: 4,
+              padding: 8, fontSize: 11, margin: 0, overflowX: 'auto', whiteSpace: 'pre-wrap',
+              color: 'var(--text-secondary)', maxHeight: 200,
+            }}>{fix.originalCode}</pre>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 10, color: 'var(--status-live)', marginBottom: 2, fontWeight: 600 }}>AFTER</label>
+            <pre style={{
+              background: 'rgba(63,185,80,0.08)', border: '1px solid rgba(63,185,80,0.2)', borderRadius: 4,
+              padding: 8, fontSize: 11, margin: 0, overflowX: 'auto', whiteSpace: 'pre-wrap',
+              color: 'var(--text-secondary)', maxHeight: 200,
+            }}>{fix.fixedCode}</pre>
+          </div>
         </div>
       )}
     </div>

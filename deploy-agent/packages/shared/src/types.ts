@@ -74,10 +74,19 @@ export interface ScanReport {
   projectId: string;
   version: number;
   findings: ScanFinding[];
+  autoFixes: AutoFixRecord[];
   threatSummary: string;
   costEstimate: CostEstimate | null;
   status: 'scanning' | 'completed' | 'failed';
   createdAt: Date;
+}
+
+export interface AutoFixRecord {
+  findingId?: string;
+  filePath: string;
+  originalCode: string;
+  fixedCode: string;
+  explanation: string;
 }
 
 export interface CostEstimate {

@@ -173,14 +173,14 @@ export async function deployToCloudRun(config: DeployConfig, imageUri: string): 
     // Build template annotations (e.g., CloudSQL connection)
     const templateAnnotations: Record<string, string> = {};
     const volumeMounts: Array<{ name: string; mountPath: string }> = [];
-    const volumes: Array<{ name: string; cloudSqlInstance?: { instances: Array<{ instance: string }> } }> = [];
+    const volumes: Array<{ name: string; cloudSqlInstance?: { instances: string[] } }> = [];
 
     if (config.cloudSqlInstance) {
-      // Cloud Run v2: use volume mount for CloudSQL
+      // Cloud Run v2: use volume mount for CloudSQL — instances is a string array
       volumes.push({
         name: 'cloudsql',
         cloudSqlInstance: {
-          instances: [{ instance: config.cloudSqlInstance }],
+          instances: [config.cloudSqlInstance],
         },
       });
       volumeMounts.push({ name: 'cloudsql', mountPath: '/cloudsql' });
