@@ -167,8 +167,17 @@ export async function deployToCloudRun(config: DeployConfig, imageUri: string): 
     const existsRes = await gcpFetch(getUrl);
     const serviceExists = existsRes.ok;
 
-    // Build service spec
-    const envVars = Object.entries(config.envVars).map(([name, value]) => ({ name, value }));
+    // Build service spec — filter out Cloud Run reserved env vars
+    const RESERVED_ENV_VARS = new Set(['PORT', 'K_SERVICE', 'K_REVISION', 'K_CONFIGURATION']);
+    const envVars = Object.entries(config.envVars)
+      .filter(([name]) => {
+        if (RESERVED_ENV_VARS.has(name)) {
+          console.log(`[Deploy]   Skipping reserved env var: ${name}`);
+          return false;
+        }
+        return true;
+      })
+      .map(([name, value]) => ({ name, value }));
 
     // Build template annotations (e.g., CloudSQL connection)
     const templateAnnotations: Record<string, string> = {};
@@ -176,15 +185,17 @@ export async function deployToCloudRun(config: DeployConfig, imageUri: string): 
     const volumes: Array<{ name: string; cloudSqlInstance?: { instances: string[] } }> = [];
 
     if (config.cloudSqlInstance) {
-      // Cloud Run v2: use volume mount for CloudSQL — instances is a string array
+      // Cloud Run v2: use volume mount for CloudSQL — instances must be plain string array
+      const instanceStr = String(config.cloudSqlInstance);
       volumes.push({
         name: 'cloudsql',
         cloudSqlInstance: {
-          instances: [config.cloudSqlInstance],
+          instances: [instanceStr],
         },
       });
       volumeMounts.push({ name: 'cloudsql', mountPath: '/cloudsql' });
-      console.log(`[Deploy]   CloudSQL connection: ${config.cloudSqlInstance}`);
+      console.log(`[Deploy]   CloudSQL volume: ${JSON.stringify(volumes[volumes.length - 1])}`);
+      console.log(`[Deploy]   CloudSQL connection: ${instanceStr} (type: ${typeof instanceStr})`);
     }
 
     const serviceSpec = {

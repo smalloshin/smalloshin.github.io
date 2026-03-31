@@ -258,8 +258,15 @@ function rowToScanReport(row: Record<string, unknown>): ScanReport {
   // Parse findings from DB JSON columns
   const semgrepFindings = parseJsonField(row.semgrep_findings) as Array<Record<string, unknown>> ?? [];
   const trivyFindings = parseJsonField(row.trivy_findings) as Array<Record<string, unknown>> ?? [];
-  const llmAnalysis = parseJsonField(row.llm_analysis) as { findings?: Array<Record<string, unknown>>; summary?: string } | null;
-  const autoFixes = parseJsonField(row.auto_fixes) as Array<Record<string, unknown>> ?? [];
+  const llmAnalysis = parseJsonField(row.llm_analysis) as {
+    findings?: Array<Record<string, unknown>>;
+    autoFixes?: Array<Record<string, unknown>>;
+    summary?: string;
+  } | null;
+  // auto_fixes column stores apply results: {applied, diff, explanation, verificationPassed}
+  const applyResults = (parseJsonField(row.auto_fixes) as Array<Record<string, unknown>>) ?? [];
+  // LLM auto-fix suggestions: {findingId, filePath, originalCode, fixedCode, explanation}
+  const llmAutoFixes = llmAnalysis?.autoFixes ?? [];
 
   // Merge all findings into one list
   const allFindings = [
@@ -268,12 +275,25 @@ function rowToScanReport(row: Record<string, unknown>): ScanReport {
     ...(llmAnalysis?.findings ?? []),
   ];
 
+  // Merge auto-fix data: combine LLM suggestions with apply results
+  // Each LLM suggestion may have a corresponding apply result
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mergedAutoFixes: any[] = llmAutoFixes.map((suggestion, i) => ({
+    ...suggestion,
+    applied: applyResults[i]?.applied ?? false,
+    diff: applyResults[i]?.diff ?? '',
+  }));
+  // If there are more apply results than suggestions (shouldn't happen, but safe)
+  for (let i = llmAutoFixes.length; i < applyResults.length; i++) {
+    mergedAutoFixes.push(applyResults[i]);
+  }
+
   return {
     id: row.id as string,
     projectId: row.project_id as string,
     version: row.version as number,
     findings: allFindings as unknown as ScanReport['findings'],
-    autoFixes: (autoFixes ?? []) as unknown as ScanReport['autoFixes'],
+    autoFixes: mergedAutoFixes as unknown as ScanReport['autoFixes'],
     threatSummary: (row.threat_summary as string) ?? '',
     costEstimate: row.cost_estimate as ScanReport['costEstimate'],
     status: row.status as ScanReport['status'],

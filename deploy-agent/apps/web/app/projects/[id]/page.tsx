@@ -49,10 +49,12 @@ interface ScanFinding {
 
 interface AutoFixRecord {
   findingId?: string;
-  filePath: string;
-  originalCode: string;
-  fixedCode: string;
+  filePath?: string;
+  originalCode?: string;
+  fixedCode?: string;
   explanation: string;
+  applied?: boolean;
+  diff?: string;
 }
 
 interface ScanReport {
@@ -602,35 +604,51 @@ function FindingCard({ finding }: { finding: ScanFinding }) {
 
 function AutoFixCard({ fix }: { fix: AutoFixRecord }) {
   const [showDiff, setShowDiff] = useState(false);
+  const isApplied = fix.applied !== false; // default true for old format
+  const statusColor = isApplied ? 'var(--status-live)' : 'var(--status-critical)';
+  const statusLabel = isApplied ? '\u2714 已修復' : '\u2718 未套用';
 
   return (
     <div style={{
-      background: 'rgba(63,185,80,0.05)', border: '1px solid rgba(63,185,80,0.2)', borderRadius: 6,
-      padding: '10px 12px', cursor: 'pointer',
+      background: isApplied ? 'rgba(63,185,80,0.05)' : 'rgba(248,81,73,0.05)',
+      border: `1px solid ${isApplied ? 'rgba(63,185,80,0.2)' : 'rgba(248,81,73,0.2)'}`,
+      borderRadius: 6, padding: '10px 12px', cursor: 'pointer',
     }} onClick={() => setShowDiff(!showDiff)}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ color: 'var(--status-live)', fontSize: 12, fontWeight: 600 }}>&#x2714; FIXED</span>
+        <span style={{ color: statusColor, fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{statusLabel}</span>
         <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>{fix.explanation}</span>
-        <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-secondary)' }}>{fix.filePath}</span>
+        {fix.filePath && (
+          <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0 }}>{fix.filePath}</span>
+        )}
       </div>
-      {showDiff && (
-        <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <div>
-            <label style={{ display: 'block', fontSize: 10, color: 'var(--status-critical)', marginBottom: 2, fontWeight: 600 }}>BEFORE</label>
+      {showDiff && (fix.originalCode || fix.diff) && (
+        <div style={{ marginTop: 8 }}>
+          {fix.originalCode && fix.fixedCode ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 10, color: 'var(--status-critical)', marginBottom: 2, fontWeight: 600 }}>BEFORE</label>
+                <pre style={{
+                  background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.2)', borderRadius: 4,
+                  padding: 8, fontSize: 11, margin: 0, overflowX: 'auto', whiteSpace: 'pre-wrap',
+                  color: 'var(--text-secondary)', maxHeight: 200,
+                }}>{fix.originalCode}</pre>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 10, color: 'var(--status-live)', marginBottom: 2, fontWeight: 600 }}>AFTER</label>
+                <pre style={{
+                  background: 'rgba(63,185,80,0.08)', border: '1px solid rgba(63,185,80,0.2)', borderRadius: 4,
+                  padding: 8, fontSize: 11, margin: 0, overflowX: 'auto', whiteSpace: 'pre-wrap',
+                  color: 'var(--text-secondary)', maxHeight: 200,
+                }}>{fix.fixedCode}</pre>
+              </div>
+            </div>
+          ) : fix.diff ? (
             <pre style={{
-              background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.2)', borderRadius: 4,
+              background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 4,
               padding: 8, fontSize: 11, margin: 0, overflowX: 'auto', whiteSpace: 'pre-wrap',
               color: 'var(--text-secondary)', maxHeight: 200,
-            }}>{fix.originalCode}</pre>
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 10, color: 'var(--status-live)', marginBottom: 2, fontWeight: 600 }}>AFTER</label>
-            <pre style={{
-              background: 'rgba(63,185,80,0.08)', border: '1px solid rgba(63,185,80,0.2)', borderRadius: 4,
-              padding: 8, fontSize: 11, margin: 0, overflowX: 'auto', whiteSpace: 'pre-wrap',
-              color: 'var(--text-secondary)', maxHeight: 200,
-            }}>{fix.fixedCode}</pre>
-          </div>
+            }}>{fix.diff}</pre>
+          ) : null}
         </div>
       )}
     </div>

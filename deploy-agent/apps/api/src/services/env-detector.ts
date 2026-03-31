@@ -172,8 +172,8 @@ export function detectEnvVars(ctx: DetectionContext): EnvDetectionResult {
   // 7. Common patterns (any framework)
   applyCommonRules(ctx, detected, missing, notes, referenced, warnings);
 
-  // 8. PORT — always set to match Cloud Run container port
-  detected['PORT'] = String(ctx.port);
+  // 8. PORT — Cloud Run sets PORT automatically, do NOT include it in env vars
+  // (Cloud Run rejects requests that set reserved env names like PORT)
 
   // 8. NODE_ENV
   if (referenced.has('NODE_ENV') || ctx.language === 'typescript' || ctx.language === 'javascript') {

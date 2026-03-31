@@ -83,10 +83,12 @@ export interface ScanReport {
 
 export interface AutoFixRecord {
   findingId?: string;
-  filePath: string;
-  originalCode: string;
-  fixedCode: string;
+  filePath?: string;
+  originalCode?: string;
+  fixedCode?: string;
   explanation: string;
+  applied?: boolean;
+  diff?: string;
 }
 
 export interface CostEstimate {
