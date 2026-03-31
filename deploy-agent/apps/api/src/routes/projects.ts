@@ -81,7 +81,7 @@ const submitSchema = z.object({
   config: z.object({
     deployTarget: z.enum(['cloud_run']).default('cloud_run'),
     customDomain: z.string().optional(),
-    allowUnauthenticated: z.boolean().default(false),
+    allowUnauthenticated: z.boolean().default(true),  // Public by default
     gcpProject: z.string().optional(),
     gcpRegion: z.string().optional(),
   }).optional(),

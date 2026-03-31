@@ -206,7 +206,7 @@ function SubmitModal({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
   const [gitUrl, setGitUrl] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [customDomain, setCustomDomain] = useState('');
-  const [allowUnauth, setAllowUnauth] = useState(false);
+  const [allowUnauth] = useState(true); // Always public — deploy agent projects are meant for public access
   const [envVarsText, setEnvVarsText] = useState('');
   const [showEnvVars, setShowEnvVars] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -379,12 +379,7 @@ function SubmitModal({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
           placeholder="my-app（將會變成 my-app.punwave.com）"
         />
 
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' }}>
-            <input type="checkbox" checked={allowUnauth} onChange={(e) => setAllowUnauth(e.target.checked)} />
-            允許未經驗證的存取（公開）
-          </label>
-        </div>
+        {/* allowUnauthenticated is always true — deploy agent projects are public by default */}
 
         <div style={{ marginBottom: 16 }}>
           <button
