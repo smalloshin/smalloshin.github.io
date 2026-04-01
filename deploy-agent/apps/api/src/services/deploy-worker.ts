@@ -3,9 +3,11 @@
 
 import {
   getProject,
+  listProjects,
   transitionProject,
   createDeployment,
   updateDeployment,
+  getDeploymentsByProject,
 } from './orchestrator';
 import { buildAndPushImage, deployToCloudRun } from './deploy-engine';
 import { setupCustomDomainWithDns, type DnsConfig } from './dns-manager';
@@ -94,6 +96,46 @@ export async function runDeployPipeline(
     const userEnvVars = (project.config?.envVars as Record<string, string>) ?? {};
     const finalEnvVars = mergeEnvVars(envDetection.detected, userEnvVars);
     console.log(`[Deploy]   ENV total: ${Object.keys(finalEnvVars).length} vars (${Object.keys(envDetection.detected).length} auto + ${Object.keys(userEnvVars).length} user)`);
+
+    // ── Monorepo: inject sibling backend URLs for frontend services ──
+    const projectGroup = project.config?.projectGroup as string | undefined;
+    const serviceRole = project.config?.serviceRole as string | undefined;
+    if (projectGroup && serviceRole === 'frontend') {
+      currentStep = 'Step 2d: Resolve monorepo sibling URLs';
+      console.log(`[Deploy] ${currentStep}...`);
+      try {
+        const allProjects = await listProjects();
+        const siblings = allProjects.filter(p =>
+          (p.config?.projectGroup as string) === projectGroup && p.id !== project.id
+        );
+        for (const sibling of siblings) {
+          const siblingRole = sibling.config?.serviceRole as string;
+          if (siblingRole === 'backend') {
+            // Find the sibling's deployment URL
+            const siblingDeploys = await getDeploymentsByProject(sibling.id);
+            const liveDeploy = siblingDeploys.find(d => d.cloudRunUrl);
+            if (liveDeploy?.cloudRunUrl) {
+              const backendUrl = liveDeploy.cloudRunUrl;
+              console.log(`[Deploy]   Found sibling backend URL: ${backendUrl} (from ${sibling.name})`);
+              // Inject into common API URL env vars
+              const apiUrlKeys = ['VITE_API_URL', 'NEXT_PUBLIC_API_URL', 'REACT_APP_API_URL',
+                                  'NUXT_PUBLIC_API_URL', 'API_URL', 'BACKEND_URL', 'API_BASE_URL'];
+              for (const key of apiUrlKeys) {
+                // Only inject if the var is referenced (detected or missing) and not user-provided
+                if ((finalEnvVars[key] !== undefined || envDetection.missing.includes(key)) && !userEnvVars[key]) {
+                  finalEnvVars[key] = backendUrl;
+                  console.log(`[Deploy]   Injected ${key} = ${backendUrl}`);
+                }
+              }
+            } else {
+              console.warn(`[Deploy]   Sibling backend "${sibling.name}" has no deployment URL yet`);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[Deploy]   Sibling URL resolution failed: ${(err as Error).message}`);
+      }
+    }
 
     // Determine if CloudSQL connection is needed
     const dbVarKeys = Object.keys(finalEnvVars).filter(k =>

@@ -46,6 +46,11 @@ export interface ProjectConfig {
   gcpRegion?: string;
   gcsSourceUri?: string;  // GCS URI for uploaded source (durable across Cloud Run revisions)
   envVars?: Record<string, string>;  // User-provided env vars (merged with auto-detected)
+  // Monorepo multi-service support
+  projectGroup?: string;           // Shared group ID linking sibling services
+  serviceRole?: 'backend' | 'frontend';  // Role determines deploy order & URL injection
+  serviceDirName?: string;         // Original subdirectory name within monorepo
+  siblings?: Array<{ name: string; role: string; dirName: string }>;
 }
 
 export interface ScanFinding {

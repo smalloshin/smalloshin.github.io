@@ -215,7 +215,7 @@ export async function projectRoutes(app: FastifyInstance) {
     }
 
     // ── Defensive cleanup: remove macOS/OS junk directories ──
-    const { rmSync, existsSync, statSync, readdirSync } = await import('node:fs');
+    const { rmSync, existsSync, statSync, readdirSync, readFileSync } = await import('node:fs');
     const junkDirs = ['__MACOSX', '.DS_Store', '__pycache__', '.Spotlight-V100', '.Trashes'];
     for (const junk of junkDirs) {
       const junkPath = join(extractDir, junk);
@@ -267,6 +267,99 @@ export async function projectRoutes(app: FastifyInstance) {
     }
     console.log(`[Upload] Final projectDir: ${projectDir}, hasDockerfile: ${existsSync(join(projectDir, 'Dockerfile'))}, entries: [${entries.join(', ')}]`);
 
+    // ── Monorepo detection: check for multiple Dockerfiles in subdirectories ──
+    const subdirs = readdirSync(projectDir, { withFileTypes: true })
+      .filter(d => d.isDirectory() && !d.name.startsWith('.') && d.name !== 'node_modules')
+      .map(d => d.name);
+    const servicesWithDockerfile = subdirs.filter(d => existsSync(join(projectDir, d, 'Dockerfile')));
+
+    // If 2+ subdirectories have Dockerfiles and root does NOT have one → monorepo
+    const isMonorepo = servicesWithDockerfile.length >= 2 && !existsSync(join(projectDir, 'Dockerfile'));
+
+    if (isMonorepo) {
+      console.log(`[Upload] Monorepo detected! Services: ${servicesWithDockerfile.join(', ')}`);
+      const groupId = `group-${Date.now()}`;
+      const userEnvVars = parseEnvVarsText(envVarsRaw);
+      const createdProjects: Array<{ project: unknown; scanReport: unknown }> = [];
+
+      // Classify services: 'backend' deploys first, 'frontend' deploys after
+      const classifyService = (dirName: string, serviceDir: string): 'backend' | 'frontend' => {
+        const lower = dirName.toLowerCase();
+        if (lower.includes('backend') || lower.includes('api') || lower.includes('server')) return 'backend';
+        if (lower.includes('frontend') || lower.includes('web') || lower.includes('client') || lower.includes('app')) return 'frontend';
+        // Heuristic: check for known backend files
+        if (existsSync(join(serviceDir, 'requirements.txt')) || existsSync(join(serviceDir, 'go.mod'))) return 'backend';
+        // Check for known frontend indicators
+        if (existsSync(join(serviceDir, 'vite.config.ts')) || existsSync(join(serviceDir, 'next.config.js')) ||
+            existsSync(join(serviceDir, 'next.config.ts')) || existsSync(join(serviceDir, 'next.config.mjs'))) return 'frontend';
+        // Check package.json for framework hints
+        try {
+          const pkg = JSON.parse(readFileSync(join(serviceDir, 'package.json'), 'utf8'));
+          const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+          if (deps.next || deps.nuxt || deps.vite || deps['@sveltejs/kit'] || deps.react) return 'frontend';
+          if (deps.express || deps.fastify || deps.hono || deps.koa) return 'backend';
+        } catch { /* ignore */ }
+        return 'backend'; // default to backend
+      };
+
+      const siblings = servicesWithDockerfile.map(d => ({
+        dirName: d,
+        role: classifyService(d, join(projectDir, d)),
+        projectName: `${name.trim()}-${d}`,
+      }));
+
+      for (const svc of siblings) {
+        const serviceDir = join(projectDir, svc.dirName);
+        const svcSlug = svc.projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+
+        let gcsSourceUri = '';
+        try {
+          gcsSourceUri = await uploadSourceToGcs(svcSlug, serviceDir);
+        } catch (err) {
+          console.error(`[Upload] GCS upload failed for ${svc.projectName}:`, (err as Error).message);
+        }
+
+        const project = await createProject({
+          name: svc.projectName,
+          sourceType: 'upload',
+          sourceUrl: serviceDir,
+          config: {
+            deployTarget: 'cloud_run',
+            customDomain: customDomain.trim() ? `${customDomain.trim()}-${svc.dirName}` : undefined,
+            allowUnauthenticated,
+            gcsSourceUri,
+            envVars: Object.keys(userEnvVars).length > 0 ? userEnvVars : undefined,
+            // Monorepo metadata
+            projectGroup: groupId,
+            serviceRole: svc.role, // 'backend' | 'frontend'
+            serviceDirName: svc.dirName,
+            siblings: siblings.map(s => ({ name: s.projectName, role: s.role, dirName: s.dirName })),
+          },
+        });
+
+        await transitionProject(project.id, 'scanning', 'system', { trigger: 'auto' });
+        const scanReport = await createScanReport(project.id);
+
+        runPipeline(project.id, serviceDir).catch((err) => {
+          console.error(`[Pipeline] Async dispatch failed for ${project.id}:`, (err as Error).message);
+        });
+
+        createdProjects.push({
+          project: { ...project, status: 'scanning' },
+          scanReport,
+        });
+      }
+
+      console.log(`[Upload] Monorepo group ${groupId}: created ${createdProjects.length} projects`);
+      return reply.status(201).send({
+        monorepo: true,
+        groupId,
+        services: createdProjects,
+        uploadedFile: fileName,
+      });
+    }
+
+    // ── Single-service project (original flow) ──
     // Upload source to GCS for durable storage (Cloud Run /tmp is ephemeral)
     let gcsSourceUri = '';
     try {
@@ -368,6 +461,22 @@ export async function projectRoutes(app: FastifyInstance) {
     }
 
     return { project: { ...project, status: 'scanning' }, scanReport };
+  });
+
+  // Force-fail a stuck project (e.g. scanning timeout)
+  app.post<{ Params: { id: string } }>('/api/projects/:id/force-fail', async (request, reply) => {
+    const project = await getProject(request.params.id);
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    if (project.status !== 'scanning' && project.status !== 'deploying') {
+      return reply.status(400).send({ error: `Project is not stuck (status: ${project.status})` });
+    }
+
+    await transitionProject(project.id, 'failed', 'admin', {
+      reason: 'Force-failed by admin (stuck pipeline)',
+    });
+
+    return { project: { ...project, status: 'failed' } };
   });
 
   // Delete project and tear down all GCP resources
