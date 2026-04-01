@@ -247,36 +247,50 @@ export async function projectRoutes(app: FastifyInstance) {
       projectDir = extractDir;
     }
 
-    // ── Validate: must have a Dockerfile or package.json ──
-    const hasDockerfile = existsSync(join(projectDir, 'Dockerfile'));
-    const hasPackageJson = existsSync(join(projectDir, 'package.json'));
-    if (!hasDockerfile && !hasPackageJson) {
-      // Maybe nested one level deeper? Try to find Dockerfile
-      const subdirs = readdirSync(projectDir, { withFileTypes: true })
-        .filter(d => d.isDirectory())
+    // ── Monorepo detection: MUST run before single-service fallback ──
+    // Check for multiple Dockerfiles in subdirectories while projectDir is still the root
+    {
+      const monorepoSubdirs = readdirSync(projectDir, { withFileTypes: true })
+        .filter(d => d.isDirectory() && !d.name.startsWith('.') && d.name !== 'node_modules')
         .map(d => d.name);
-      const subWithDockerfile = subdirs.find(d => existsSync(join(projectDir, d, 'Dockerfile')));
-      if (subWithDockerfile) {
-        console.log(`[Upload] Dockerfile found in subdirectory: ${subWithDockerfile}, adjusting projectDir`);
-        projectDir = join(projectDir, subWithDockerfile);
+      const servicesWithDockerfile = monorepoSubdirs.filter(d => existsSync(join(projectDir, d, 'Dockerfile')));
+      const rootHasDockerfile = existsSync(join(projectDir, 'Dockerfile'));
+
+      // If 2+ subdirectories have Dockerfiles and root does NOT have one → monorepo
+      if (servicesWithDockerfile.length >= 2 && !rootHasDockerfile) {
+        // Jump to monorepo handling (defined below)
+        var isMonorepo = true;
+        var monorepoServicesWithDockerfile = servicesWithDockerfile;
       } else {
-        console.warn(`[Upload] No Dockerfile or package.json found in extracted archive at: ${projectDir}`);
-        console.warn(`[Upload] Directory contents: ${readdirSync(projectDir).join(', ')}`);
-        // Don't block — the build step will give a clearer error
+        var isMonorepo = false;
+        var monorepoServicesWithDockerfile: string[] = [];
       }
     }
-    console.log(`[Upload] Final projectDir: ${projectDir}, hasDockerfile: ${existsSync(join(projectDir, 'Dockerfile'))}, entries: [${entries.join(', ')}]`);
 
-    // ── Monorepo detection: check for multiple Dockerfiles in subdirectories ──
-    const subdirs = readdirSync(projectDir, { withFileTypes: true })
-      .filter(d => d.isDirectory() && !d.name.startsWith('.') && d.name !== 'node_modules')
-      .map(d => d.name);
-    const servicesWithDockerfile = subdirs.filter(d => existsSync(join(projectDir, d, 'Dockerfile')));
-
-    // If 2+ subdirectories have Dockerfiles and root does NOT have one → monorepo
-    const isMonorepo = servicesWithDockerfile.length >= 2 && !existsSync(join(projectDir, 'Dockerfile'));
+    // ── Validate: must have a Dockerfile or package.json (single-service) ──
+    if (!isMonorepo) {
+      const hasDockerfile = existsSync(join(projectDir, 'Dockerfile'));
+      const hasPackageJson = existsSync(join(projectDir, 'package.json'));
+      if (!hasDockerfile && !hasPackageJson) {
+        // Maybe nested one level deeper? Try to find Dockerfile
+        const subdirs = readdirSync(projectDir, { withFileTypes: true })
+          .filter(d => d.isDirectory())
+          .map(d => d.name);
+        const subWithDockerfile = subdirs.find(d => existsSync(join(projectDir, d, 'Dockerfile')));
+        if (subWithDockerfile) {
+          console.log(`[Upload] Dockerfile found in subdirectory: ${subWithDockerfile}, adjusting projectDir`);
+          projectDir = join(projectDir, subWithDockerfile);
+        } else {
+          console.warn(`[Upload] No Dockerfile or package.json found in extracted archive at: ${projectDir}`);
+          console.warn(`[Upload] Directory contents: ${readdirSync(projectDir).join(', ')}`);
+          // Don't block — the build step will give a clearer error
+        }
+      }
+    }
+    console.log(`[Upload] Final projectDir: ${projectDir}, hasDockerfile: ${existsSync(join(projectDir, 'Dockerfile'))}, entries: [${entries.join(', ')}], isMonorepo: ${isMonorepo}`);
 
     if (isMonorepo) {
+      const servicesWithDockerfile = monorepoServicesWithDockerfile;
       console.log(`[Upload] Monorepo detected! Services: ${servicesWithDockerfile.join(', ')}`);
       const groupId = `group-${Date.now()}`;
       const userEnvVars = parseEnvVarsText(envVarsRaw);

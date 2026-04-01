@@ -90,6 +90,26 @@ export function detectProject(projectDir: string): DetectionResult {
     result.port = 8080;
   }
 
+  // If Dockerfile exists, check EXPOSE directive to override detected port
+  // This handles cases like Vite/React built to static + served by nginx on port 80
+  if (result.hasDockerfile) {
+    const dockerfilePath = path.join(projectDir, 'Dockerfile');
+    const dockerContent = safeRead(dockerfilePath);
+    if (dockerContent) {
+      const exposeMatch = dockerContent.match(/^EXPOSE\s+(\d+)/m);
+      if (exposeMatch) {
+        const exposedPort = parseInt(exposeMatch[1], 10);
+        if (exposedPort !== result.port) {
+          result.port = exposedPort;
+        }
+      }
+      // Also detect nginx-based images (port 80 by default even without EXPOSE)
+      if (dockerContent.match(/FROM\s+nginx/i) && !dockerContent.match(/^EXPOSE/m)) {
+        result.port = 80;
+      }
+    }
+  }
+
   return result;
 }
 
