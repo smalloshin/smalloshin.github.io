@@ -29,8 +29,23 @@ export async function createProject(input: {
     [input.name, slug, input.sourceType, input.sourceUrl ?? null, JSON.stringify(input.config ?? {})]
   );
 
-  await logTransition(result.rows[0].id, null, 'submitted', 'system', { action: 'create' });
-  return rowToProject(result.rows[0]);
+  // Ensure every project belongs to a group — singleton projects group by themselves.
+  const row = result.rows[0];
+  const cfg = (typeof row.config === 'string' ? JSON.parse(row.config) : row.config) ?? {};
+  if (!cfg.projectGroup) {
+    cfg.projectGroup = row.id as string;
+    cfg.groupName = cfg.groupName ?? input.name;
+    await query('UPDATE projects SET config = $1 WHERE id = $2', [JSON.stringify(cfg), row.id]);
+    row.config = cfg;
+  } else if (!cfg.groupName) {
+    // Backfill groupName from current name if monorepo flow forgot it
+    cfg.groupName = input.name.replace(/-(?:backend|frontend|api|web|worker|server|client|app)$/i, '');
+    await query('UPDATE projects SET config = $1 WHERE id = $2', [JSON.stringify(cfg), row.id]);
+    row.config = cfg;
+  }
+
+  await logTransition(row.id, null, 'submitted', 'system', { action: 'create' });
+  return rowToProject(row);
 }
 
 export async function transitionProject(

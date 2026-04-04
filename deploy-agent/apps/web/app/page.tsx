@@ -14,28 +14,118 @@ interface Project {
   sourceType: string;
   createdAt: string;
   updatedAt: string;
+  config?: Record<string, unknown>;
+}
+
+interface ProjectResource {
+  kind: 'cloud_run' | 'redis_db' | 'postgres_db' | 'gcs_source' | 'custom_domain';
+  label: string;
+  detail?: string;
+  reference?: string;
+  removable: boolean;
+}
+
+interface ProjectWithResources extends Project {
+  resources: ProjectResource[];
+  latestDeployment: {
+    cloudRunService: string | null;
+    cloudRunUrl: string | null;
+    customDomain: string | null;
+    deployedAt: string | null;
+  } | null;
+}
+
+interface ProjectGroup {
+  groupId: string;
+  groupName: string;
+  createdAt: string;
+  updatedAt: string;
+  serviceCount: number;
+  liveCount: number;
+  stoppedCount: number;
+  failedCount: number;
+  services: ProjectWithResources[];
 }
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [groups, setGroups] = useState<ProjectGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteLog, setDeleteLog] = useState<{ step: string; status: string; error?: string }[] | null>(null);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [selected, setSelected] = useState<Record<string, Set<string>>>({}); // groupId -> set of serviceIds
+  const [actionBusy, setActionBusy] = useState<string | null>(null); // "groupId:action" lock
 
-  const loadProjects = (silent = false) => {
+  const loadGroups = (silent = false) => {
     if (!silent) setLoading(true);
-    fetch(`${API}/api/projects`)
+    fetch(`${API}/api/project-groups`)
       .then((r) => r.json())
-      .then((data) => { setProjects(data.projects); setLoading(false); })
+      .then((data) => { setGroups(data.groups ?? []); setLoading(false); })
       .catch((err) => { setError(err.message); setLoading(false); });
   };
 
+  const loadProjects = loadGroups; // back-compat for existing callers (modals)
+
+  const toggleExpand = (gid: string) =>
+    setExpanded((p) => ({ ...p, [gid]: !p[gid] }));
+
+  const toggleSelect = (gid: string, sid: string) => {
+    setSelected((prev) => {
+      const next = { ...prev };
+      const set = new Set(next[gid] ?? []);
+      if (set.has(sid)) set.delete(sid); else set.add(sid);
+      next[gid] = set;
+      return next;
+    });
+  };
+
+  const runGroupAction = async (group: ProjectGroup, action: 'stop' | 'start') => {
+    const sel = selected[group.groupId];
+    const serviceIds = sel && sel.size > 0 ? Array.from(sel) : undefined;
+    const key = `${group.groupId}:${action}`;
+    setActionBusy(key);
+    try {
+      const res = await fetch(`${API}/api/project-groups/${group.groupId}/actions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, serviceIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      const failed = (data.results ?? []).filter((r: { success: boolean }) => !r.success);
+      if (failed.length > 0) {
+        alert(`${failed.length} / ${(data.results ?? []).length} 失敗：\n` +
+          failed.map((r: { name: string; message: string }) => `- ${r.name}: ${r.message}`).join('\n'));
+      }
+      loadGroups(true);
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
+  const runServiceAction = async (projectId: string, action: 'stop' | 'start') => {
+    const key = `svc:${projectId}:${action}`;
+    setActionBusy(key);
+    try {
+      const res = await fetch(`${API}/api/projects/${projectId}/${action}`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      loadGroups(true);
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
   useEffect(() => {
-    loadProjects();
-    const interval = setInterval(() => loadProjects(true), 5000);
+    loadGroups();
+    const interval = setInterval(() => loadGroups(true), 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -75,7 +165,7 @@ export default function ProjectsPage() {
   return (
     <div>
       <Header onSubmit={() => setShowModal(true)} />
-      {projects.length === 0 ? (
+      {groups.length === 0 ? (
         <div style={{ marginTop: 48, textAlign: 'center', color: 'var(--text-secondary)' }}>
           <p style={{ fontSize: 18, marginBottom: 8 }}>尚無專案</p>
           <p>提交你的第一個專案以開始使用。</p>
@@ -84,72 +174,22 @@ export default function ProjectsPage() {
           </button>
         </div>
       ) : (
-        <table style={{ width: '100%', marginTop: 16, borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', fontSize: 12, textTransform: 'uppercase' as const }}>
-              <th style={{ padding: '8px 12px', textAlign: 'left' }}>名稱</th>
-              <th style={{ padding: '8px 12px', textAlign: 'left' }}>狀態</th>
-              <th style={{ padding: '8px 12px', textAlign: 'left' }}>語言</th>
-              <th style={{ padding: '8px 12px', textAlign: 'left' }}>來源</th>
-              <th style={{ padding: '8px 12px', textAlign: 'left' }}>建立日期</th>
-              <th style={{ padding: '8px 12px', textAlign: 'right' }}>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {projects.map((p) => (
-              <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                <td style={{ padding: '12px', fontWeight: 500, cursor: 'pointer' }}
-                    onClick={() => window.location.href = `/projects/${p.id}`}>{p.name}</td>
-                <td style={{ padding: '12px' }}>
-                  <StatusPill status={p.status} />
-                </td>
-                <td style={{ padding: '12px', color: 'var(--text-secondary)', fontSize: 13 }}>
-                  {p.detectedLanguage ?? '—'}
-                </td>
-                <td style={{ padding: '12px', color: 'var(--text-secondary)', fontSize: 13 }}>
-                  {p.sourceType}
-                </td>
-                <td style={{ padding: '12px', color: 'var(--text-secondary)', fontSize: 13 }}>
-                  {new Date(p.createdAt).toLocaleDateString()}
-                </td>
-                <td style={{ padding: '12px', textAlign: 'right' }}>
-                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                    {(p.status === 'failed' || p.status === 'needs_revision') && (
-                      <button
-                        className="btn"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          const btn = e.currentTarget;
-                          btn.textContent = '重試中...';
-                          btn.disabled = true;
-                          try {
-                            const res = await fetch(`${API}/api/projects/${p.id}/resubmit`, { method: 'POST' });
-                            if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-                            loadProjects();
-                          } catch (err) {
-                            alert((err as Error).message);
-                            btn.textContent = '重試';
-                            btn.disabled = false;
-                          }
-                        }}
-                        style={{ fontSize: 12, padding: '4px 10px', color: 'var(--accent)', borderColor: 'var(--accent)' }}
-                      >
-                        重試
-                      </button>
-                    )}
-                    <button
-                      className="btn"
-                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(p); setDeleteLog(null); }}
-                      style={{ fontSize: 12, padding: '4px 10px', color: 'var(--status-critical)', borderColor: 'var(--status-critical)' }}
-                    >
-                      刪除
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {groups.map((g) => (
+            <GroupCard
+              key={g.groupId}
+              group={g}
+              expanded={!!expanded[g.groupId]}
+              selected={selected[g.groupId] ?? new Set()}
+              actionBusy={actionBusy}
+              onToggleExpand={() => toggleExpand(g.groupId)}
+              onToggleSelect={(sid) => toggleSelect(g.groupId, sid)}
+              onGroupAction={(action) => runGroupAction(g, action)}
+              onServiceAction={runServiceAction}
+              onDeleteService={(svc) => { setDeleteTarget(svc); setDeleteLog(null); }}
+            />
+          ))}
+        </div>
       )}
       {showModal && (
         <SubmitModal
@@ -533,6 +573,213 @@ function DeleteModal({ project, deleting, deleteLog, onClose, onConfirm }: {
   );
 }
 
+function GroupCard({
+  group, expanded, selected, actionBusy,
+  onToggleExpand, onToggleSelect, onGroupAction, onServiceAction, onDeleteService,
+}: {
+  group: ProjectGroup;
+  expanded: boolean;
+  selected: Set<string>;
+  actionBusy: string | null;
+  onToggleExpand: () => void;
+  onToggleSelect: (serviceId: string) => void;
+  onGroupAction: (action: 'stop' | 'start') => void;
+  onServiceAction: (projectId: string, action: 'stop' | 'start') => void;
+  onDeleteService: (svc: ProjectWithResources) => void;
+}) {
+  const busyStop = actionBusy === `${group.groupId}:stop`;
+  const busyStart = actionBusy === `${group.groupId}:start`;
+  const selectedLabel = selected.size > 0 ? `(${selected.size} 個選中)` : '(全部)';
+  const isMonorepo = group.serviceCount > 1;
+
+  return (
+    <div style={{
+      background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+      borderRadius: 8, overflow: 'hidden',
+    }}>
+      {/* Group header */}
+      <div
+        style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+          cursor: 'pointer', userSelect: 'none' as const,
+        }}
+        onClick={onToggleExpand}
+      >
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)', width: 12 }}>
+          {expanded ? '▾' : '▸'}
+        </span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>
+            {group.groupName}
+            {isMonorepo && (
+              <span style={{
+                marginLeft: 8, fontSize: 11, padding: '2px 6px', borderRadius: 4,
+                background: 'var(--bg-tertiary)', color: 'var(--text-secondary)',
+                fontWeight: 400,
+              }}>monorepo · {group.serviceCount} 個服務</span>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+            {group.liveCount > 0 && <span style={{ color: 'var(--status-live)' }}>● {group.liveCount} live </span>}
+            {group.stoppedCount > 0 && <span style={{ color: 'var(--text-secondary)' }}>● {group.stoppedCount} stopped </span>}
+            {group.failedCount > 0 && <span style={{ color: 'var(--status-critical)' }}>● {group.failedCount} failed </span>}
+            <span style={{ marginLeft: 8 }}>更新於 {new Date(group.updatedAt).toLocaleString()}</span>
+          </div>
+        </div>
+        {isMonorepo && (
+          <div style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
+            <button
+              className="btn"
+              disabled={busyStop}
+              onClick={() => onGroupAction('stop')}
+              style={{ fontSize: 12, padding: '4px 10px' }}
+              title={`停止 ${selectedLabel}`}
+            >
+              {busyStop ? '停止中…' : `停止 ${selectedLabel}`}
+            </button>
+            <button
+              className="btn"
+              disabled={busyStart}
+              onClick={() => onGroupAction('start')}
+              style={{ fontSize: 12, padding: '4px 10px', color: 'var(--status-live)', borderColor: 'var(--status-live)' }}
+              title={`啟動 ${selectedLabel}`}
+            >
+              {busyStart ? '啟動中…' : `啟動 ${selectedLabel}`}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Expanded services */}
+      {expanded && (
+        <div style={{ borderTop: '1px solid var(--border)' }}>
+          {group.services.map((svc) => (
+            <ServiceRow
+              key={svc.id}
+              svc={svc}
+              isMonorepo={isMonorepo}
+              checked={selected.has(svc.id)}
+              actionBusy={actionBusy}
+              onToggleSelect={() => onToggleSelect(svc.id)}
+              onServiceAction={onServiceAction}
+              onDeleteService={() => onDeleteService(svc)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ServiceRow({
+  svc, isMonorepo, checked, actionBusy, onToggleSelect, onServiceAction, onDeleteService,
+}: {
+  svc: ProjectWithResources;
+  isMonorepo: boolean;
+  checked: boolean;
+  actionBusy: string | null;
+  onToggleSelect: () => void;
+  onServiceAction: (projectId: string, action: 'stop' | 'start') => void;
+  onDeleteService: () => void;
+}) {
+  const running = svc.status === 'live';
+  const stopped = svc.status === 'stopped';
+  const canStop = running;
+  const canStart = stopped;
+  const busyStop = actionBusy === `svc:${svc.id}:stop`;
+  const busyStart = actionBusy === `svc:${svc.id}:start`;
+  const url = svc.latestDeployment?.cloudRunUrl || (svc.latestDeployment?.customDomain ? `https://${svc.latestDeployment.customDomain}` : null);
+  const gcsSource = svc.resources.find((r) => r.kind === 'gcs_source');
+
+  return (
+    <div style={{
+      padding: '12px 16px 12px 40px', borderTop: '1px solid var(--border)',
+      display: 'flex', flexDirection: 'column', gap: 8,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {isMonorepo && (
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={onToggleSelect}
+            style={{ cursor: 'pointer' }}
+          />
+        )}
+        <a href={`/projects/${svc.id}`} style={{ fontWeight: 500, color: 'var(--text-primary)', textDecoration: 'none' }}>
+          {svc.name}
+        </a>
+        <StatusPill status={svc.status} />
+        {svc.detectedLanguage && (
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{svc.detectedLanguage}{svc.detectedFramework ? ` · ${svc.detectedFramework}` : ''}</span>
+        )}
+        {url && (
+          <a href={url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--accent-blue, #58a6ff)', fontFamily: 'monospace', marginLeft: 'auto' }}>
+            {url.replace(/^https?:\/\//, '')} ↗
+          </a>
+        )}
+      </div>
+
+      {/* Resources list */}
+      {svc.resources.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginLeft: isMonorepo ? 24 : 0 }}>
+          {svc.resources.map((r, i) => (
+            <span key={i} style={{
+              fontSize: 11, padding: '3px 8px', borderRadius: 4,
+              background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+              color: 'var(--text-secondary)', fontFamily: 'monospace',
+            }} title={r.detail}>
+              <span style={{ color: 'var(--text-primary)' }}>{resourceIcon(r.kind)}</span> {r.label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 6, marginLeft: isMonorepo ? 24 : 0 }}>
+        {canStop && (
+          <button
+            className="btn"
+            disabled={busyStop}
+            onClick={() => onServiceAction(svc.id, 'stop')}
+            style={{ fontSize: 11, padding: '3px 10px' }}
+          >{busyStop ? '停止中…' : '停止'}</button>
+        )}
+        {canStart && (
+          <button
+            className="btn"
+            disabled={busyStart}
+            onClick={() => onServiceAction(svc.id, 'start')}
+            style={{ fontSize: 11, padding: '3px 10px', color: 'var(--status-live)', borderColor: 'var(--status-live)' }}
+          >{busyStart ? '啟動中…' : '啟動'}</button>
+        )}
+        {gcsSource && (
+          <a
+            href={`${API}/api/projects/${svc.id}/source-download`}
+            className="btn"
+            style={{ fontSize: 11, padding: '3px 10px', textDecoration: 'none' }}
+          >下載原始碼</a>
+        )}
+        <button
+          className="btn"
+          onClick={onDeleteService}
+          style={{ fontSize: 11, padding: '3px 10px', color: 'var(--status-critical)', borderColor: 'var(--status-critical)', marginLeft: 'auto' }}
+        >刪除</button>
+      </div>
+    </div>
+  );
+}
+
+function resourceIcon(kind: ProjectResource['kind']): string {
+  switch (kind) {
+    case 'cloud_run': return '☁️';
+    case 'custom_domain': return '🌐';
+    case 'redis_db': return '🔴';
+    case 'postgres_db': return '🐘';
+    case 'gcs_source': return '📦';
+    default: return '•';
+  }
+}
+
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = {
     submitted: 'pill-scanning',
@@ -548,6 +795,7 @@ function StatusPill({ status }: { status: string }) {
     rejected: 'pill-failed',
     needs_revision: 'pill-review',
     rolling_back: 'pill-failed',
+    stopped: 'pill-failed',
   };
   return <span className={`pill ${map[status] ?? ''}`}>{status.replace(/_/g, ' ')}</span>;
 }

@@ -12,6 +12,7 @@ export type ProjectStatus =
   | 'canary_check'
   | 'rolling_back'
   | 'live'
+  | 'stopped'
   | 'failed';
 
 export type ScanSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
@@ -47,11 +48,46 @@ export interface ProjectConfig {
   gcsSourceUri?: string;  // GCS URI for uploaded source (durable across Cloud Run revisions)
   envVars?: Record<string, string>;  // User-provided env vars (merged with auto-detected)
   detectedPort?: number;             // Port detected during pipeline scan (fallback when source is gone)
-  // Monorepo multi-service support
+  // Project grouping (always set; single-service projects are a group of 1)
   projectGroup?: string;           // Shared group ID linking sibling services
+  groupName?: string;              // Display name for the group (e.g. "kol-studio")
   serviceRole?: 'backend' | 'frontend';  // Role determines deploy order & URL injection
   serviceDirName?: string;         // Original subdirectory name within monorepo
   siblings?: Array<{ name: string; role: string; dirName: string }>;
+  // Cached last-deployed image for stop/start lifecycle
+  lastDeployedImage?: string;      // e.g. asia-east1-docker.pkg.dev/.../api:v123
+}
+
+// ─── Project Group (aggregated view of related services + resources) ───
+
+export interface ProjectGroup {
+  groupId: string;
+  groupName: string;
+  createdAt: Date;
+  updatedAt: Date;
+  serviceCount: number;
+  liveCount: number;
+  stoppedCount: number;
+  failedCount: number;
+  services: ProjectWithResources[];
+}
+
+export interface ProjectWithResources extends Project {
+  resources: ProjectResource[];
+  latestDeployment: {
+    cloudRunService: string | null;
+    cloudRunUrl: string | null;
+    customDomain: string | null;
+    deployedAt: Date | null;
+  } | null;
+}
+
+export interface ProjectResource {
+  kind: 'cloud_run' | 'redis_db' | 'postgres_db' | 'gcs_source' | 'custom_domain';
+  label: string;                   // Human-readable (e.g. "Cloud Run: da-foo")
+  detail?: string;                 // Extra info (e.g. "db0 · prefix=proj:foo:")
+  reference?: string;              // Underlying identifier (service name, db name, gs:// URI)
+  removable: boolean;              // Whether user can stop/delete this resource
 }
 
 export interface ScanFinding {

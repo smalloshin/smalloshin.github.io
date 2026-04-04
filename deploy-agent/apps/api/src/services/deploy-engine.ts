@@ -16,6 +16,11 @@ export interface DeployConfig {
   allowUnauthenticated?: boolean;
   port?: number;
   cloudSqlInstance?: string;  // CloudSQL instance connection name for annotation
+  vpcEgress?: {
+    network: string;   // e.g. "default"
+    subnet: string;    // e.g. "default"
+    egress?: 'ALL_TRAFFIC' | 'PRIVATE_RANGES_ONLY';
+  };
 }
 
 export interface DeployResult {
@@ -205,6 +210,22 @@ export async function deployToCloudRun(config: DeployConfig, imageUri: string): 
       console.log(`[Deploy]   CloudSQL connection: ${instanceStr} (type: ${typeof instanceStr})`);
     }
 
+    // Direct VPC egress — enables reaching internal VPC resources (Redis VM etc.)
+    let vpcAccess: {
+      networkInterfaces: Array<{ network: string; subnetwork: string }>;
+      egress: string;
+    } | undefined;
+    if (config.vpcEgress) {
+      vpcAccess = {
+        networkInterfaces: [{
+          network: config.vpcEgress.network,
+          subnetwork: config.vpcEgress.subnet,
+        }],
+        egress: config.vpcEgress.egress ?? 'PRIVATE_RANGES_ONLY',
+      };
+      console.log(`[Deploy]   VPC egress: network=${config.vpcEgress.network} subnet=${config.vpcEgress.subnet} egress=${vpcAccess.egress}`);
+    }
+
     const serviceSpec = {
       template: {
         containers: [
@@ -222,6 +243,7 @@ export async function deployToCloudRun(config: DeployConfig, imageUri: string): 
           },
         ],
         volumes: volumes.length > 0 ? volumes : undefined,
+        vpcAccess,
         scaling: {
           minInstanceCount: config.minInstances ?? 0,
           maxInstanceCount: config.maxInstances ?? 10,

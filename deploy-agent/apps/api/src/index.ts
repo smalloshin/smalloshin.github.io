@@ -7,6 +7,7 @@ import { reviewRoutes } from './routes/reviews';
 import { deployRoutes } from './routes/deploys';
 import { mcpRoutes } from './routes/mcp';
 import { settingsRoutes } from './routes/settings';
+import { projectGroupRoutes } from './routes/project-groups';
 
 const app = Fastify({
   logger: {
@@ -40,6 +41,7 @@ await app.register(reviewRoutes);
 await app.register(deployRoutes);
 await app.register(mcpRoutes);
 await app.register(settingsRoutes);
+await app.register(projectGroupRoutes);
 
 // Global error handler
 app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {

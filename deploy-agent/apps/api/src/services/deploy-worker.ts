@@ -9,6 +9,7 @@ import {
   updateDeployment,
   getDeploymentsByProject,
   getLatestScanReport,
+  updateProjectConfig,
 } from './orchestrator';
 import { buildAndPushImage, deployToCloudRun } from './deploy-engine';
 import { setupCustomDomainWithDns, type DnsConfig } from './dns-manager';
@@ -252,6 +253,9 @@ export async function runDeployPipeline(
       }
     }
 
+    // Track whether we auto-provisioned VPC-internal resources (for VPC egress)
+    let needsVpcEgress = false;
+
     // ── Step 2d: Provision auto-provisioned resources from ResourcePlan ──
     // Looks at the LLM-generated resource plan and spins up Redis (or other
     // shared services) the app needs, injecting the connection details into
@@ -273,6 +277,7 @@ export async function runDeployPipeline(
               // Only inject if not user-provided
               if (!userEnvVars['REDIS_URL']) {
                 finalEnvVars['REDIS_URL'] = redisResult.redisUrl;
+                needsVpcEgress = true; // shared Redis lives on internal VPC
                 console.log(`[Deploy]   Redis provisioned: ${redisResult.providerInfo} (${redisResult.created ? 'new' : 'reused'})`);
                 console.log(`[Deploy]   Injected REDIS_URL (db${redisResult.dbIndex})`);
               } else {
@@ -325,6 +330,11 @@ export async function runDeployPipeline(
       allowUnauthenticated: project.config?.allowUnauthenticated ?? false,
       port,
       cloudSqlInstance,
+      vpcEgress: needsVpcEgress ? {
+        network: process.env.VPC_EGRESS_NETWORK ?? 'default',
+        subnet: process.env.VPC_EGRESS_SUBNET ?? 'default',
+        egress: 'PRIVATE_RANGES_ONLY',
+      } : undefined,
     }, buildResult.imageUri);
 
     if (!deployResult.success) {
@@ -340,6 +350,14 @@ export async function runDeployPipeline(
       healthStatus: 'unknown',
       deployedAt: new Date(),
     });
+
+    // Cache last-deployed image so /start can restart the service without rebuilding
+    try {
+      const updatedConfig = { ...(project.config ?? {}), lastDeployedImage: buildResult.imageUri };
+      await updateProjectConfig(project.id, updatedConfig);
+    } catch (err) {
+      console.warn(`[Deploy]   Failed to cache lastDeployedImage: ${(err as Error).message}`);
+    }
 
     // Post-deploy: update URL-based env vars now that Cloud Run URL is known
     // If no custom domain, URL-based vars (NEXTAUTH_URL, APP_URL etc.) should use Cloud Run URL

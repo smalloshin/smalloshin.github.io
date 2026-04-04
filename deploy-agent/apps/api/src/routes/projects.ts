@@ -22,6 +22,7 @@ import {
 import { runPipeline } from '../services/pipeline-worker';
 import { deleteService, deleteDomainMapping, deleteContainerImage, updateServiceEnvVars, getServiceEnvVars } from '../services/deploy-engine';
 import { deleteCname } from '../services/dns-manager';
+import { stopProjectService, startProjectService } from '../services/service-lifecycle';
 
 const execFileAsync = promisify(execFile);
 
@@ -350,6 +351,7 @@ export async function projectRoutes(app: FastifyInstance) {
             envVars: Object.keys(userEnvVars).length > 0 ? userEnvVars : undefined,
             // Monorepo metadata
             projectGroup: groupId,
+            groupName: name.trim(),
             serviceRole: svc.role, // 'backend' | 'frontend'
             serviceDirName: svc.dirName,
             siblings: siblings.map(s => ({ name: s.projectName, role: s.role, dirName: s.dirName })),
@@ -831,5 +833,51 @@ export async function projectRoutes(app: FastifyInstance) {
       projectId: project.id,
       updatedKeys: Object.keys(mergedEnvVars),
     };
+  });
+
+  // Stop a single project's Cloud Run service (delete service, keep image)
+  app.post<{ Params: { id: string } }>('/api/projects/:id/stop', async (request, reply) => {
+    const result = await stopProjectService(request.params.id, 'api-user');
+    if (!result.success) return reply.status(400).send({ error: result.message });
+    return result;
+  });
+
+  // Start a stopped project (redeploy from cached Artifact Registry image)
+  app.post<{ Params: { id: string } }>('/api/projects/:id/start', async (request, reply) => {
+    const result = await startProjectService(request.params.id, 'api-user');
+    if (!result.success) return reply.status(400).send({ error: result.message });
+    return result;
+  });
+
+  // Download the project's source tarball (proxies GCS through service account)
+  app.get<{ Params: { id: string } }>('/api/projects/:id/source-download', async (request, reply) => {
+    const project = await getProject(request.params.id);
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    const gcsUri = project.config?.gcsSourceUri as string | undefined;
+    if (!gcsUri) return reply.status(404).send({ error: 'No source archive on record for this project' });
+
+    // gs://bucket/path/to/object.tar.gz
+    const match = gcsUri.match(/^gs:\/\/([^/]+)\/(.+)$/);
+    if (!match) return reply.status(500).send({ error: `Malformed GCS URI: ${gcsUri}` });
+    const [, bucket, object] = match;
+
+    // GCS JSON API: ?alt=media streams the object bytes.
+    const url = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(object)}?alt=media`;
+    const gcsResp = await gcpFetch(url);
+    if (!gcsResp.ok) {
+      const errText = await gcsResp.text();
+      return reply.status(gcsResp.status).send({ error: `GCS fetch failed: ${errText}` });
+    }
+
+    const filename = object.split('/').pop() ?? `${project.slug}-source.tar.gz`;
+    reply
+      .header('Content-Type', gcsResp.headers.get('content-type') ?? 'application/gzip')
+      .header('Content-Disposition', `attachment; filename="${filename}"`);
+    const len = gcsResp.headers.get('content-length');
+    if (len) reply.header('Content-Length', len);
+
+    // Stream the body to the client
+    return reply.send(gcsResp.body);
   });
 }

@@ -89,3 +89,17 @@ CREATE TABLE IF NOT EXISTS state_transitions (
 
 CREATE INDEX IF NOT EXISTS idx_state_transitions_project ON state_transitions(project_id);
 CREATE INDEX IF NOT EXISTS idx_state_transitions_created ON state_transitions(created_at);
+
+-- Backfill: ensure every project has a projectGroup + groupName (singletons group by their own id)
+UPDATE projects
+SET config = jsonb_set(
+               jsonb_set(config, '{projectGroup}', to_jsonb(id::text)),
+               '{groupName}', to_jsonb(name)
+             )
+WHERE config->>'projectGroup' IS NULL;
+
+UPDATE projects
+SET config = jsonb_set(config, '{groupName}', to_jsonb(name))
+WHERE config->>'groupName' IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_projects_group ON projects((config->>'projectGroup'));
