@@ -13,6 +13,8 @@ import {
   transitionProject,
   createScanReport,
   getLatestScanReport,
+  updateScanReport,
+  createReview,
   getDeploymentsByProject,
   deleteProjectFromDb,
   updateProjectConfig,
@@ -339,7 +341,10 @@ export async function projectRoutes(app: FastifyInstance) {
           sourceUrl: serviceDir,
           config: {
             deployTarget: 'cloud_run',
-            customDomain: customDomain.trim() ? `${customDomain.trim()}-${svc.dirName}` : undefined,
+            // Subdomain convention: frontend = {domain}, backend = api.{domain}
+            customDomain: customDomain.trim()
+              ? (svc.role === 'frontend' ? customDomain.trim() : `api.${customDomain.trim()}`)
+              : undefined,
             allowUnauthenticated,
             gcsSourceUri,
             envVars: Object.keys(userEnvVars).length > 0 ? userEnvVars : undefined,
@@ -418,6 +423,161 @@ export async function projectRoutes(app: FastifyInstance) {
     return { report };
   });
 
+  // Download detailed scan report as Markdown (for senior engineers to review unfixed issues)
+  app.get<{ Params: { id: string } }>('/api/projects/:id/scan/report', async (request, reply) => {
+    const project = await getProject(request.params.id);
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    const report = await getLatestScanReport(project.id);
+    if (!report) return reply.status(404).send({ error: 'No scan report found' });
+
+    const now = new Date().toISOString().slice(0, 10);
+    const filename = `${project.slug}-security-report-${now}.md`;
+
+    // ── Group findings by severity ──
+    type SeverityKey = 'critical' | 'high' | 'medium' | 'low' | 'info';
+    const severityOrder: SeverityKey[] = ['critical', 'high', 'medium', 'low', 'info'];
+    const severityEmoji: Record<SeverityKey, string> = {
+      critical: '\u{1F534}', high: '\u{1F7E0}', medium: '\u{1F7E1}', low: '\u{1F535}', info: '\u26AA',
+    };
+    const grouped: Record<SeverityKey, typeof report.findings> = {
+      critical: [], high: [], medium: [], low: [], info: [],
+    };
+    for (const f of report.findings) {
+      const sev = (f.severity ?? 'info') as SeverityKey;
+      (grouped[sev] ?? grouped.info).push(f);
+    }
+
+    // ── Build auto-fix lookup ──
+    const fixedIds = new Set<string>();
+    const unfixedFindings: typeof report.findings = [];
+    for (const fix of report.autoFixes) {
+      if (fix.applied && fix.findingId) fixedIds.add(fix.findingId);
+    }
+    for (const f of report.findings) {
+      if (!fixedIds.has(f.id)) unfixedFindings.push(f);
+    }
+
+    // ── Markdown report ──
+    const lines: string[] = [];
+    lines.push(`# Security Scan Report — ${project.name}`);
+    lines.push('');
+    lines.push(`| Item | Value |`);
+    lines.push(`|------|-------|`);
+    lines.push(`| Project | ${project.name} (\`${project.slug}\`) |`);
+    lines.push(`| Language | ${project.detectedLanguage ?? 'unknown'} |`);
+    lines.push(`| Framework | ${project.detectedFramework ?? 'none'} |`);
+    lines.push(`| Scan Date | ${report.createdAt.toISOString().slice(0, 19).replace('T', ' ')} UTC |`);
+    lines.push(`| Report Version | v${report.version} |`);
+    lines.push('');
+
+    // Summary counts
+    const total = report.findings.length;
+    const fixed = fixedIds.size;
+    const remaining = unfixedFindings.length;
+    lines.push(`## Summary`);
+    lines.push('');
+    lines.push(`| Severity | Count |`);
+    lines.push(`|----------|-------|`);
+    for (const sev of severityOrder) {
+      if (grouped[sev].length > 0) {
+        lines.push(`| ${severityEmoji[sev]} **${sev.toUpperCase()}** | ${grouped[sev].length} |`);
+      }
+    }
+    lines.push(`| **Total** | **${total}** |`);
+    lines.push(`| Auto-fixed | ${fixed} |`);
+    lines.push(`| Requires manual review | **${remaining}** |`);
+    lines.push('');
+
+    // Auto-fixes applied
+    if (report.autoFixes.length > 0) {
+      lines.push(`## Auto-Fixes Applied`);
+      lines.push('');
+      const appliedFixes = report.autoFixes.filter(f => f.applied);
+      if (appliedFixes.length === 0) {
+        lines.push('No auto-fixes were successfully applied.');
+      } else {
+        for (const fix of appliedFixes) {
+          lines.push(`### \u2705 ${fix.filePath ?? 'unknown'}`);
+          lines.push('');
+          lines.push(fix.explanation);
+          if (fix.diff) {
+            lines.push('');
+            lines.push('```diff');
+            lines.push(fix.diff);
+            lines.push('```');
+          }
+          lines.push('');
+        }
+      }
+      lines.push('');
+    }
+
+    // Findings requiring manual review (grouped by severity)
+    lines.push(`## Findings Requiring Manual Review`);
+    lines.push('');
+    if (remaining === 0) {
+      lines.push('All findings have been auto-fixed. No manual action required.');
+    } else {
+      let idx = 1;
+      for (const sev of severityOrder) {
+        const sevFindings = grouped[sev].filter(f => !fixedIds.has(f.id));
+        if (sevFindings.length === 0) continue;
+
+        lines.push(`### ${severityEmoji[sev]} ${sev.toUpperCase()} (${sevFindings.length})`);
+        lines.push('');
+
+        for (const f of sevFindings) {
+          lines.push(`#### ${idx}. ${f.title}`);
+          lines.push('');
+          lines.push(`| Field | Detail |`);
+          lines.push(`|-------|--------|`);
+          lines.push(`| Severity | **${f.severity}** |`);
+          lines.push(`| Category | ${f.category} |`);
+          lines.push(`| Tool | ${f.tool} |`);
+          lines.push(`| File | \`${f.filePath}\` |`);
+          lines.push(`| Lines | L${f.lineStart}${f.lineEnd !== f.lineStart ? `–L${f.lineEnd}` : ''} |`);
+          lines.push('');
+          lines.push(`> ${f.description}`);
+          lines.push('');
+          idx++;
+        }
+      }
+    }
+
+    // Threat summary (LLM-generated)
+    if (report.threatSummary) {
+      lines.push(`## Threat Analysis`);
+      lines.push('');
+      lines.push(report.threatSummary);
+      lines.push('');
+    }
+
+    // Cost estimate
+    if (report.costEstimate) {
+      lines.push(`## Estimated Monthly Cost (GCP Cloud Run)`);
+      lines.push('');
+      lines.push(`| Resource | Cost (USD) |`);
+      lines.push(`|----------|-----------|`);
+      lines.push(`| Compute | $${report.costEstimate.breakdown.compute.toFixed(2)} |`);
+      lines.push(`| Storage | $${report.costEstimate.breakdown.storage.toFixed(2)} |`);
+      lines.push(`| Networking | $${report.costEstimate.breakdown.networking.toFixed(2)} |`);
+      lines.push(`| SSL | $${report.costEstimate.breakdown.ssl.toFixed(2)} |`);
+      lines.push(`| **Total** | **$${report.costEstimate.monthlyTotal.toFixed(2)}** |`);
+      lines.push('');
+    }
+
+    lines.push('---');
+    lines.push(`*Generated by Wave Deploy Agent on ${now}*`);
+
+    const markdown = lines.join('\n');
+
+    return reply
+      .header('Content-Type', 'text/markdown; charset=utf-8')
+      .header('Content-Disposition', `attachment; filename="${filename}"`)
+      .send(markdown);
+  });
+
   // Get full project detail: project + scan report + deployments + timeline
   app.get<{ Params: { id: string } }>('/api/projects/:id/detail', async (request, reply) => {
     const project = await getProject(request.params.id);
@@ -455,7 +615,7 @@ export async function projectRoutes(app: FastifyInstance) {
     const project = await getProject(request.params.id);
     if (!project) return reply.status(404).send({ error: 'Project not found' });
 
-    if (project.status !== 'needs_revision' && project.status !== 'failed') {
+    if (project.status !== 'needs_revision' && project.status !== 'failed' && project.status !== 'live') {
       return reply.status(400).send({ error: `Cannot retry from status: ${project.status}` });
     }
 
@@ -491,6 +651,29 @@ export async function projectRoutes(app: FastifyInstance) {
     });
 
     return { project: { ...project, status: 'failed' } };
+  });
+
+  // Skip scan and go directly to review_pending (for stuck pipelines)
+  app.post<{ Params: { id: string } }>('/api/projects/:id/skip-scan', async (request, reply) => {
+    const project = await getProject(request.params.id);
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    if (project.status !== 'scanning' && project.status !== 'failed') {
+      return reply.status(400).send({ error: `Cannot skip scan from status: ${project.status}` });
+    }
+
+    // Create scan report if missing, then transition to review_pending
+    let scanReport = await getLatestScanReport(project.id);
+    if (!scanReport) {
+      scanReport = await createScanReport(project.id);
+    }
+    await updateScanReport(scanReport.id, { status: 'completed' });
+    await transitionProject(project.id, 'review_pending', 'admin', {
+      reason: 'Scan skipped by admin',
+    });
+    await createReview(scanReport.id);
+
+    return { project: { ...project, status: 'review_pending' }, scanReport };
   });
 
   // Delete project and tear down all GCP resources

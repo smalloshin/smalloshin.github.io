@@ -281,7 +281,7 @@ export default function ProjectDetailPage() {
       )}
 
       {/* Scan Report */}
-      {scanReport && <ScanReportSection scanReport={scanReport} projectStatus={project.status} />}
+      {scanReport && <ScanReportSection scanReport={scanReport} projectStatus={project.status} projectId={project.id} />}
 
       {/* Pipeline Timeline */}
       <Card title="流程時間軸" style={{ marginTop: 16 }}>
@@ -439,7 +439,7 @@ function MetadataBlock({ metadata }: { metadata: Record<string, unknown> }) {
   );
 }
 
-function ScanReportSection({ scanReport, projectStatus }: { scanReport: ScanReport; projectStatus: string }) {
+function ScanReportSection({ scanReport, projectStatus, projectId }: { scanReport: ScanReport; projectStatus: string; projectId: string }) {
   // After approval/deploying/live, default to collapsed; during scanning/review, default to expanded
   const postReview = ['approved', 'deploying', 'deployed', 'ssl_provisioning', 'canary_check', 'live'].includes(projectStatus);
   const [expanded, setExpanded] = useState(!postReview);
@@ -477,6 +477,25 @@ function ScanReportSection({ scanReport, projectStatus }: { scanReport: ScanRepo
             <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
               ~${scanReport.costEstimate.monthlyTotal.toFixed(2)}/mo
             </span>
+          )}
+          {scanReport.status === 'completed' && (
+            <a
+              href={`${API}/api/projects/${projectId}/scan/report`}
+              download
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '4px 10px', fontSize: 12, fontWeight: 500,
+                background: 'var(--bg-tertiary)', color: 'var(--accent-blue)',
+                border: '1px solid var(--border)', borderRadius: 6,
+                textDecoration: 'none', cursor: 'pointer',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--border)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
+            >
+              <span style={{ fontSize: 14 }}>&#8681;</span> 下載報告
+            </a>
           )}
         </div>
       </div>

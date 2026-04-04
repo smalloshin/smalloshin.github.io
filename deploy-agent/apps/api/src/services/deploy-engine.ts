@@ -87,7 +87,14 @@ export async function buildAndPushImage(
       steps: [
         {
           name: 'gcr.io/cloud-builders/docker',
-          args: ['build', '-t', imageUri, '.'],
+          args: [
+            'build',
+            // Pass env vars as build args (for Vite/React build-time injection)
+            ...Object.entries(config.envVars)
+              .filter(([k]) => k.startsWith('VITE_') || k.startsWith('NEXT_PUBLIC_') || k.startsWith('REACT_APP_'))
+              .flatMap(([k, v]) => ['--build-arg', `${k}=${v}`]),
+            '-t', imageUri, '.',
+          ],
         },
       ],
       images: [imageUri],

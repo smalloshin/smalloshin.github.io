@@ -46,6 +46,7 @@ export interface ProjectConfig {
   gcpRegion?: string;
   gcsSourceUri?: string;  // GCS URI for uploaded source (durable across Cloud Run revisions)
   envVars?: Record<string, string>;  // User-provided env vars (merged with auto-detected)
+  detectedPort?: number;             // Port detected during pipeline scan (fallback when source is gone)
   // Monorepo multi-service support
   projectGroup?: string;           // Shared group ID linking sibling services
   serviceRole?: 'backend' | 'frontend';  // Role determines deploy order & URL injection

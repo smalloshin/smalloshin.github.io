@@ -47,8 +47,8 @@ export async function runDeployPipeline(
     currentStep = 'Step 2: Detect project settings';
     console.log(`[Deploy] ${currentStep}...`);
     let port = 3000;
-    let detectedFramework: string | null = null;
-    let detectedLanguage = 'unknown';
+    let detectedFramework: string | null = project.detectedFramework ?? null;
+    let detectedLanguage = project.detectedLanguage ?? 'unknown';
     try {
       const detection = detectProject(projectDir);
       port = detection.port;
@@ -56,7 +56,71 @@ export async function runDeployPipeline(
       detectedLanguage = detection.language;
       console.log(`[Deploy]   Detected: ${detectedLanguage}/${detectedFramework ?? 'none'}, port: ${port}`);
     } catch {
-      console.log(`[Deploy]   Using default port: ${port}`);
+      // projectDir may not exist (ephemeral /tmp after revision change)
+      // Fall back to DB-stored detection + port saved during pipeline scan
+      const savedPort = project.config?.detectedPort as number | undefined;
+      if (savedPort) {
+        port = savedPort;
+      } else {
+        const frameworkPortMap: Record<string, number> = {
+          nextjs: 3000, nuxt: 3000, sveltekit: 5173,
+          express: 3000, fastify: 3000, hono: 3000,
+          django: 8000, fastapi: 8000, flask: 5000,
+          static: 8080,
+        };
+        if (detectedFramework && frameworkPortMap[detectedFramework]) {
+          port = frameworkPortMap[detectedFramework];
+        } else if (detectedLanguage === 'python') {
+          port = 8000;
+        } else if (detectedLanguage === 'go') {
+          port = 8080;
+        } else {
+          // Last resort: extract Dockerfile from GCS source to check EXPOSE
+          const gcsUri = project.config?.gcsSourceUri as string | undefined;
+          if (gcsUri && gcsUri.startsWith('gs://')) {
+            try {
+              const withoutPrefix = gcsUri.slice(5);
+              const slashIdx = withoutPrefix.indexOf('/');
+              const bucket = withoutPrefix.slice(0, slashIdx);
+              const object = withoutPrefix.slice(slashIdx + 1);
+              // Download tgz via GCS REST API
+              const downloadUrl = `https://storage.googleapis.com/storage/v1/b/${bucket}/o/${encodeURIComponent(object)}?alt=media`;
+              // Get access token from GCP metadata server (available on Cloud Run)
+              const tokenResp = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token', { headers: { 'Metadata-Flavor': 'Google' } });
+              const tokenData = await tokenResp.json() as { access_token: string };
+              const resp = await fetch(downloadUrl, { headers: { Authorization: `Bearer ${tokenData.access_token}` } });
+              if (resp.ok) {
+                const { writeFileSync: wfs, readFileSync: rfs, existsSync: efs, mkdirSync } = await import('node:fs');
+                const { execSync } = await import('node:child_process');
+                const tmpExtract = `/tmp/deploy-port-check-${project.id}`;
+                mkdirSync(tmpExtract, { recursive: true });
+                const buf = Buffer.from(await resp.arrayBuffer());
+                wfs(`${tmpExtract}/src.tgz`, buf);
+                execSync(`tar xzf ${tmpExtract}/src.tgz -C ${tmpExtract} 2>/dev/null || true`, { timeout: 10000 });
+                const dfPaths = [`${tmpExtract}/Dockerfile`, `${tmpExtract}/source/Dockerfile`];
+                for (const dfPath of dfPaths) {
+                  if (efs(dfPath)) {
+                    const dockerContent = rfs(dfPath, 'utf8');
+                    const exposeMatch = dockerContent.match(/^EXPOSE\s+(\d+)/m);
+                    if (exposeMatch) {
+                      port = parseInt(exposeMatch[1], 10);
+                      console.log(`[Deploy]   Port from GCS Dockerfile EXPOSE: ${port}`);
+                    } else if (dockerContent.match(/FROM\s+nginx/i)) {
+                      port = 80;
+                      console.log(`[Deploy]   Port from GCS Dockerfile (nginx): ${port}`);
+                    }
+                    break;
+                  }
+                }
+                execSync(`rm -rf ${tmpExtract}`, { timeout: 5000 });
+              }
+            } catch (gcsErr) {
+              console.warn(`[Deploy]   Could not extract port from GCS source: ${(gcsErr as Error).message}`);
+            }
+          }
+        }
+      }
+      console.log(`[Deploy]   Using DB-stored detection: ${detectedLanguage}/${detectedFramework ?? 'none'}, port: ${port}`);
     }
 
     // Compute custom domain FQDN for env detection
@@ -111,18 +175,25 @@ export async function runDeployPipeline(
         for (const sibling of siblings) {
           const siblingRole = sibling.config?.serviceRole as string;
           if (siblingRole === 'backend') {
-            // Find the sibling's deployment URL
+            // Prefer custom domain over Cloud Run URL for sibling backend
+            const siblingCustomDomain = sibling.config?.customDomain as string | undefined;
+            const siblingFqdn = siblingCustomDomain && cfZoneName
+              ? `https://${siblingCustomDomain}.${cfZoneName}`
+              : undefined;
             const siblingDeploys = await getDeploymentsByProject(sibling.id);
             const liveDeploy = siblingDeploys.find(d => d.cloudRunUrl);
-            if (liveDeploy?.cloudRunUrl) {
-              const backendUrl = liveDeploy.cloudRunUrl;
-              console.log(`[Deploy]   Found sibling backend URL: ${backendUrl} (from ${sibling.name})`);
+            const fallbackUrl = liveDeploy?.cloudRunUrl ?? undefined;
+            if (siblingFqdn || fallbackUrl) {
+              const backendUrl = siblingFqdn || fallbackUrl!;
+              console.log(`[Deploy]   Found sibling backend URL: ${backendUrl} (from ${sibling.name}${siblingFqdn ? ', custom domain' : ''})`);
               // Inject into common API URL env vars
               const apiUrlKeys = ['VITE_API_URL', 'NEXT_PUBLIC_API_URL', 'REACT_APP_API_URL',
                                   'NUXT_PUBLIC_API_URL', 'API_URL', 'BACKEND_URL', 'API_BASE_URL'];
               for (const key of apiUrlKeys) {
-                // Only inject if the var is referenced (detected or missing) and not user-provided
-                if ((finalEnvVars[key] !== undefined || envDetection.missing.includes(key)) && !userEnvVars[key]) {
+                // Inject if: var is referenced in source, OR source wasn't available (always inject for safety)
+                const { existsSync: efs } = await import('node:fs');
+                const sourceUnavailable = !projectDir || !efs(projectDir);
+                if (!userEnvVars[key] && (finalEnvVars[key] !== undefined || envDetection.missing.includes(key) || sourceUnavailable)) {
                   finalEnvVars[key] = backendUrl;
                   console.log(`[Deploy]   Injected ${key} = ${backendUrl}`);
                 }

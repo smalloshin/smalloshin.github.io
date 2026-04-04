@@ -1,9 +1,11 @@
 // Pipeline Worker — runs the full scan → analyze → auto-fix → review pipeline
 // Triggered when a project is submitted. Runs asynchronously (non-blocking).
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync, mkdirSync } from 'node:fs';
 import { join, extname } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import {
+  getProject,
   transitionProject,
   updateScanReport,
   getLatestScanReport,
@@ -15,6 +17,29 @@ import { runSemgrep, runTrivy } from './scanner';
 import { analyzeThreatModel, generateReviewReport } from './llm-analyzer';
 import { estimateMonthlyCost, formatCostEstimate } from './cost-estimator';
 import type { ScanFinding, AutoFixResult } from '@deploy-agent/shared';
+
+// Timeout utility — prevents pipeline from hanging indefinitely
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms);
+    promise.then(
+      (val) => { clearTimeout(timer); resolve(val); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
+// Keep-alive: ping self to prevent Cloud Run idle instance shutdown during long pipelines
+function startKeepAlive(): () => void {
+  const selfUrl = process.env.K_SERVICE
+    ? `http://localhost:${process.env.PORT || 4000}/api/projects`
+    : null;
+  if (!selfUrl) return () => {};
+  const interval = setInterval(async () => {
+    try { await fetch(selfUrl); } catch { /* ignore */ }
+  }, 30_000); // ping every 30s
+  return () => clearInterval(interval);
+}
 
 // File extensions worth scanning
 const SCAN_EXTENSIONS = new Set([
@@ -37,19 +62,65 @@ export async function runPipeline(
   console.log(`[Pipeline] Project dir: ${projectDir}`);
 
   let currentStep = '';
+  const stopKeepAlive = startKeepAlive();
 
   try {
+    // ─── Step 0: Ensure source files are available ───
+    // On Cloud Run, /tmp is ephemeral — source may be gone after revision change.
+    // If so, download from GCS.
+    if (!existsSync(projectDir)) {
+      currentStep = 'Step 0: Download source from GCS';
+      console.log(`[Pipeline] ${currentStep}...`);
+      const project = await getProject(projectId);
+      const gcsUri = project?.config?.gcsSourceUri as string | undefined;
+      if (!gcsUri || !gcsUri.startsWith('gs://')) {
+        throw new Error(`Source dir ${projectDir} does not exist and no GCS URI found`);
+      }
+
+      // Download via GCP metadata server auth + REST API
+      const withoutPrefix = gcsUri.slice(5);
+      const slashIdx = withoutPrefix.indexOf('/');
+      const bucket = withoutPrefix.slice(0, slashIdx);
+      const object = withoutPrefix.slice(slashIdx + 1);
+      const downloadUrl = `https://storage.googleapis.com/storage/v1/b/${bucket}/o/${encodeURIComponent(object)}?alt=media`;
+
+      let authHeaders: Record<string, string> = {};
+      try {
+        const tokenResp = await fetch(
+          'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+          { headers: { 'Metadata-Flavor': 'Google' } }
+        );
+        const tokenData = await tokenResp.json() as { access_token: string };
+        authHeaders = { Authorization: `Bearer ${tokenData.access_token}` };
+      } catch {
+        console.warn('[Pipeline]   No metadata server (local dev?), trying without auth');
+      }
+
+      const resp = await fetch(downloadUrl, { headers: authHeaders });
+      if (!resp.ok) throw new Error(`Failed to download from GCS: ${resp.status} ${resp.statusText}`);
+
+      // Save tgz and extract
+      const tgzBuffer = Buffer.from(await resp.arrayBuffer());
+      mkdirSync(projectDir, { recursive: true });
+      const tgzPath = `${projectDir}.tgz`;
+      const { writeFileSync: wfs } = await import('node:fs');
+      wfs(tgzPath, tgzBuffer);
+      execFileSync('tar', ['xzf', tgzPath, '-C', projectDir], { timeout: 30_000 });
+      console.log(`[Pipeline]   Downloaded and extracted GCS source to ${projectDir}`);
+    }
+
     // ─── Step 1: Project Detection ───
     currentStep = 'Step 1: Project Detection';
     console.log(`[Pipeline] ${currentStep}...`);
     const detection = detectProject(projectDir);
     console.log(`[Pipeline]   ${detection.framework} (${detection.language}), port ${detection.port}`);
 
-    // Update project with detected info
+    // Update project with detected info (including port in config)
     const { query: dbQuery } = await import('../db/index');
     await dbQuery(
-      'UPDATE projects SET detected_language = $1, detected_framework = $2, updated_at = NOW() WHERE id = $3',
-      [detection.language, detection.framework, projectId]
+      `UPDATE projects SET detected_language = $1, detected_framework = $2,
+       config = config || $3::jsonb, updated_at = NOW() WHERE id = $4`,
+      [detection.language, detection.framework, JSON.stringify({ detectedPort: detection.port }), projectId]
     );
 
     // ─── Step 2: Dockerfile Generation (if missing) ───
@@ -67,16 +138,15 @@ export async function runPipeline(
     // ─── Step 3: Security Scanning (Semgrep + Trivy) ───
     currentStep = 'Step 3: Security Scanning (Semgrep + Trivy)';
     console.log(`[Pipeline] ${currentStep}...`);
-    const [semgrepResult, trivyResult] = await Promise.all([
-      runSemgrep(projectDir).catch((err) => {
-        console.warn(`[Pipeline]   Semgrep failed: ${(err as Error).message}`);
-        return { tool: 'semgrep' as const, findings: [] as ScanFinding[], rawOutput: '', duration: 0 };
-      }),
-      runTrivy(projectDir).catch((err) => {
-        console.warn(`[Pipeline]   Trivy failed: ${(err as Error).message}`);
-        return { tool: 'trivy' as const, findings: [] as ScanFinding[], rawOutput: '', duration: 0 };
-      }),
-    ]);
+    // Run scans sequentially to avoid OOM (Semgrep + Trivy together exceed 2GB)
+    const semgrepResult = await runSemgrep(projectDir).catch((err) => {
+      console.warn(`[Pipeline]   Semgrep failed: ${(err as Error).message}`);
+      return { tool: 'semgrep' as const, findings: [] as ScanFinding[], rawOutput: '', duration: 0 };
+    });
+    const trivyResult = await runTrivy(projectDir).catch((err) => {
+      console.warn(`[Pipeline]   Trivy failed: ${(err as Error).message}`);
+      return { tool: 'trivy' as const, findings: [] as ScanFinding[], rawOutput: '', duration: 0 };
+    });
 
     const scannerFindings = [...semgrepResult.findings, ...trivyResult.findings];
     console.log(`[Pipeline]   Semgrep: ${semgrepResult.findings.length} findings (${semgrepResult.duration}ms)`);
@@ -91,16 +161,26 @@ export async function runPipeline(
       });
     }
 
-    // ─── Step 4: LLM Threat Analysis ───
+    // ─── Step 4: LLM Threat Analysis (90s timeout) ───
     currentStep = 'Step 4: LLM Threat Analysis';
     console.log(`[Pipeline] ${currentStep}...`);
     const sourceFiles = collectSourceFiles(projectDir);
     console.log(`[Pipeline]   Collected ${sourceFiles.size} source files`);
 
-    const threatAnalysis = await analyzeThreatModel(sourceFiles, scannerFindings);
-    console.log(`[Pipeline]   Provider: ${threatAnalysis.provider}`);
-    console.log(`[Pipeline]   LLM findings: ${threatAnalysis.findings.length}`);
-    console.log(`[Pipeline]   Auto-fix suggestions: ${threatAnalysis.autoFixes.length}`);
+    let threatAnalysis: Awaited<ReturnType<typeof analyzeThreatModel>>;
+    try {
+      threatAnalysis = await withTimeout(
+        analyzeThreatModel(sourceFiles, scannerFindings),
+        90_000,
+        'LLM Threat Analysis',
+      );
+      console.log(`[Pipeline]   Provider: ${threatAnalysis.provider}`);
+      console.log(`[Pipeline]   LLM findings: ${threatAnalysis.findings.length}`);
+      console.log(`[Pipeline]   Auto-fix suggestions: ${threatAnalysis.autoFixes.length}`);
+    } catch (err) {
+      console.warn(`[Pipeline]   LLM analysis failed/timed out: ${(err as Error).message}`);
+      threatAnalysis = { summary: `LLM analysis skipped: ${(err as Error).message}`, findings: [], autoFixes: [], provider: 'fallback' };
+    }
 
     if (scanReport) {
       await updateScanReport(scanReport.id, {
@@ -188,18 +268,22 @@ export async function runPipeline(
       await updateScanReport(scanReport.id, { costEstimate, status: 'completed' });
     }
 
-    // ─── Step 8: Generate Review Report ───
+    // ─── Step 8: Generate Review Report (60s timeout) ───
     currentStep = 'Step 8: Generate Review Report';
     console.log(`[Pipeline] ${currentStep}...`);
     const allFindings = [...scannerFindings, ...threatAnalysis.findings];
-    const reviewReport = await generateReviewReport(
-      projectId,
-      threatAnalysis,
-      scannerFindings,
-      autoFixResults,
-      costEstimate
-    );
-    console.log(`[Pipeline]   Report generated (${reviewReport.length} chars)`);
+    let reviewReport = '';
+    try {
+      reviewReport = await withTimeout(
+        generateReviewReport(projectId, threatAnalysis, scannerFindings, autoFixResults, costEstimate),
+        60_000,
+        'Review Report Generation',
+      );
+      console.log(`[Pipeline]   Report generated (${reviewReport.length} chars)`);
+    } catch (err) {
+      console.warn(`[Pipeline]   Report generation failed/timed out: ${(err as Error).message}`);
+      reviewReport = `Report generation skipped: ${(err as Error).message}`;
+    }
 
     if (scanReport) {
       await updateScanReport(scanReport.id, {
@@ -225,6 +309,7 @@ export async function runPipeline(
     console.log(`[Pipeline] ✓ Complete for project ${projectId}`);
     console.log(`[Pipeline]   Findings: ${allFindings.length} total, ${appliedCount} auto-fixed`);
     console.log(`[Pipeline]   Status: review_pending — awaiting human approval`);
+    stopKeepAlive();
 
   } catch (err) {
     const error = err as Error;
@@ -244,6 +329,7 @@ export async function runPipeline(
     } catch (transitionErr) {
       console.error('[Pipeline] Could not transition to failed:', (transitionErr as Error).message);
     }
+    stopKeepAlive();
   }
 }
 

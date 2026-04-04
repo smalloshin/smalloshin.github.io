@@ -17,9 +17,10 @@ const app = Fastify({
   },
 });
 
-// CORS
+// CORS — support comma-separated origins (e.g. "https://a.com,https://b.com")
+const corsOrigin = process.env.CORS_ORIGIN ?? '*';
 await app.register(cors, {
-  origin: process.env.CORS_ORIGIN ?? '*',
+  origin: corsOrigin === '*' ? true : corsOrigin.split(',').map(s => s.trim()),
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
 });
 

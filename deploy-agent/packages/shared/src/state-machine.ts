@@ -14,7 +14,7 @@ const VALID_TRANSITIONS: Record<ProjectStatus, ProjectStatus[]> = {
   canary_check: ['live', 'rolling_back'],
   rolling_back: ['deployed', 'failed'],
   live: ['submitted'], // resubmit for new version
-  failed: ['submitted'], // retry
+  failed: ['submitted', 'review_pending'], // retry, or skip-scan admin override
 };
 
 export function canTransition(from: ProjectStatus, to: ProjectStatus): boolean {
