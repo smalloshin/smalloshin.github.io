@@ -28,7 +28,7 @@ steps:
       - '--platform'
       - 'managed'
       - '--memory'
-      - '1Gi'
+      - '4Gi'
       - '--cpu'
       - '2'
       - '--no-allow-unauthenticated'

@@ -15,6 +15,7 @@ import { detectProject } from './project-detector';
 import { generateDockerfile } from './dockerfile-gen';
 import { runSemgrep, runTrivy } from './scanner';
 import { analyzeThreatModel, generateReviewReport } from './llm-analyzer';
+import { analyzeResources } from './resource-analyzer';
 import { estimateMonthlyCost, formatCostEstimate } from './cost-estimator';
 import type { ScanFinding, AutoFixResult } from '@deploy-agent/shared';
 
@@ -251,6 +252,35 @@ export async function runPipeline(
       }
     }
 
+    // ─── Step 6.5: Resource Plan Analysis (LLM) ───
+    currentStep = 'Step 6.5: Resource Plan Analysis';
+    console.log(`[Pipeline] ${currentStep}...`);
+    try {
+      // Gather env var references from source to feed the analyzer
+      const referencedEnvVars = collectReferencedEnvVars(projectDir, detection.language);
+      const project = await getProject(projectId);
+      const userEnvVars = (project?.config?.envVars as Record<string, string>) ?? {};
+      const resourcePlan = await withTimeout(
+        analyzeResources({
+          projectDir,
+          language: detection.language,
+          framework: detection.framework,
+          referencedEnvVars: Array.from(referencedEnvVars),
+          resolvedEnvVars: userEnvVars,
+        }),
+        60_000,
+        'Resource Plan Analysis',
+      );
+      console.log(`[Pipeline]   Provider: ${resourcePlan.provider}`);
+      console.log(`[Pipeline]   Requirements: ${resourcePlan.requirements.length} (${resourcePlan.requirements.map((r) => `${r.type}:${r.strategy}`).join(', ')})`);
+      console.log(`[Pipeline]   Can auto-deploy: ${resourcePlan.canAutoDeploy}`);
+      if (scanReport) {
+        await updateScanReport(scanReport.id, { resourcePlan });
+      }
+    } catch (err) {
+      console.warn(`[Pipeline]   Resource analysis skipped: ${(err as Error).message}`);
+    }
+
     // ─── Step 7: Cost Estimation ───
     currentStep = 'Step 7: Cost Estimation';
     console.log(`[Pipeline] ${currentStep}...`);
@@ -331,6 +361,45 @@ export async function runPipeline(
     }
     stopKeepAlive();
   }
+}
+
+// ─── Collect env var names referenced in source (for resource analyzer) ───
+
+function collectReferencedEnvVars(projectDir: string, language: string | null): Set<string> {
+  const refs = new Set<string>();
+  const extensions = language === 'python' ? new Set(['.py'])
+    : language === 'go' ? new Set(['.go'])
+    : new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
+
+  const patterns = [
+    /process\.env\.([A-Z_][A-Z0-9_]*)/g,
+    /process\.env\[['"]([A-Z_][A-Z0-9_]*)['"]\]/g,
+    /os\.(?:environ\.get|getenv|environ\[)\(?['"]([A-Z_][A-Z0-9_]*)['"]\)?/g,
+    /os\.Getenv\("([A-Z_][A-Z0-9_]*)"\)/g,
+  ];
+
+  function walk(dir: string, depth = 0): void {
+    if (depth > 5) return;
+    let entries: string[];
+    try { entries = readdirSync(dir); } catch { return; }
+    for (const entry of entries) {
+      if (SKIP_DIRS.has(entry)) continue;
+      const full = join(dir, entry);
+      try {
+        const stat = statSync(full);
+        if (stat.isDirectory()) walk(full, depth + 1);
+        else if (stat.isFile() && extensions.has(extname(entry).toLowerCase()) && stat.size <= 50 * 1024) {
+          const content = readFileSync(full, 'utf8');
+          for (const p of patterns) {
+            let m;
+            while ((m = p.exec(content)) !== null) refs.add(m[1]);
+          }
+        }
+      } catch { /* ignore */ }
+    }
+  }
+  walk(projectDir);
+  return refs;
 }
 
 // ─── Collect source files for LLM analysis ───

@@ -8,6 +8,7 @@ import {
   createDeployment,
   updateDeployment,
   getDeploymentsByProject,
+  getLatestScanReport,
 } from './orchestrator';
 import { buildAndPushImage, deployToCloudRun } from './deploy-engine';
 import { setupCustomDomainWithDns, type DnsConfig } from './dns-manager';
@@ -16,6 +17,7 @@ import { runCanaryChecks } from './canary-monitor';
 import { detectProject } from './project-detector';
 import { detectEnvVars, mergeEnvVars } from './env-detector';
 import { provisionProjectDatabase } from './db-provisioner';
+import { provisionProjectRedis } from './redis-provisioner';
 
 export async function runDeployPipeline(
   projectId: string,
@@ -101,13 +103,21 @@ export async function runDeployPipeline(
                 for (const dfPath of dfPaths) {
                   if (efs(dfPath)) {
                     const dockerContent = rfs(dfPath, 'utf8');
-                    const exposeMatch = dockerContent.match(/^EXPOSE\s+(\d+)/m);
-                    if (exposeMatch) {
-                      port = parseInt(exposeMatch[1], 10);
-                      console.log(`[Deploy]   Port from GCS Dockerfile EXPOSE: ${port}`);
-                    } else if (dockerContent.match(/FROM\s+nginx/i)) {
-                      port = 80;
-                      console.log(`[Deploy]   Port from GCS Dockerfile (nginx): ${port}`);
+                    // Priority: ENV PORT=X > EXPOSE Y > nginx default
+                    // ENV PORT is what the app actually listens on at runtime
+                    const envPortMatch = dockerContent.match(/^ENV\s+PORT[=\s]+(\d+)/m);
+                    if (envPortMatch) {
+                      port = parseInt(envPortMatch[1], 10);
+                      console.log(`[Deploy]   Port from GCS Dockerfile ENV PORT: ${port}`);
+                    } else {
+                      const exposeMatch = dockerContent.match(/^EXPOSE\s+(\d+)/m);
+                      if (exposeMatch) {
+                        port = parseInt(exposeMatch[1], 10);
+                        console.log(`[Deploy]   Port from GCS Dockerfile EXPOSE: ${port}`);
+                      } else if (dockerContent.match(/FROM\s+nginx/i)) {
+                        port = 80;
+                        console.log(`[Deploy]   Port from GCS Dockerfile (nginx): ${port}`);
+                      }
                     }
                     break;
                   }
@@ -240,6 +250,44 @@ export async function runDeployPipeline(
         console.error(`[Deploy]   DB provisioning failed: ${(err as Error).message}`);
         console.warn(`[Deploy]   Continuing with existing DATABASE_URL (may fail at runtime)`);
       }
+    }
+
+    // ── Step 2d: Provision auto-provisioned resources from ResourcePlan ──
+    // Looks at the LLM-generated resource plan and spins up Redis (or other
+    // shared services) the app needs, injecting the connection details into
+    // finalEnvVars so the app can reach them at runtime.
+    try {
+      const scanReport = await getLatestScanReport(projectId);
+      const resourcePlan = scanReport?.resourcePlan;
+      if (resourcePlan && resourcePlan.requirements.length > 0) {
+        currentStep = 'Step 2d: Provision resource plan';
+        console.log(`[Deploy] ${currentStep}...`);
+        for (const req of resourcePlan.requirements) {
+          if (req.strategy !== 'auto_provision') {
+            console.log(`[Deploy]   ${req.type} (${req.useCase}): strategy=${req.strategy} — skipping auto-provision`);
+            continue;
+          }
+          if (req.type === 'redis') {
+            try {
+              const redisResult = await provisionProjectRedis(project.id, project.slug);
+              // Only inject if not user-provided
+              if (!userEnvVars['REDIS_URL']) {
+                finalEnvVars['REDIS_URL'] = redisResult.redisUrl;
+                console.log(`[Deploy]   Redis provisioned: ${redisResult.providerInfo} (${redisResult.created ? 'new' : 'reused'})`);
+                console.log(`[Deploy]   Injected REDIS_URL (db${redisResult.dbIndex})`);
+              } else {
+                console.log(`[Deploy]   Redis: user supplied REDIS_URL, keeping user value`);
+              }
+            } catch (err) {
+              console.warn(`[Deploy]   Redis provision failed: ${(err as Error).message}`);
+            }
+          } else {
+            console.log(`[Deploy]   ${req.type}: auto-provision not yet implemented, skipping`);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[Deploy]   Resource provisioning step failed: ${(err as Error).message}`);
     }
 
     // ─── Step 3: Build and push Docker image ───

@@ -96,16 +96,23 @@ export function detectProject(projectDir: string): DetectionResult {
     const dockerfilePath = path.join(projectDir, 'Dockerfile');
     const dockerContent = safeRead(dockerfilePath);
     if (dockerContent) {
-      const exposeMatch = dockerContent.match(/^EXPOSE\s+(\d+)/m);
-      if (exposeMatch) {
-        const exposedPort = parseInt(exposeMatch[1], 10);
-        if (exposedPort !== result.port) {
-          result.port = exposedPort;
+      // Priority: ENV PORT=X > EXPOSE Y > nginx default
+      // ENV PORT is what the app actually listens on at runtime
+      const envPortMatch = dockerContent.match(/^ENV\s+PORT[=\s]+(\d+)/m);
+      if (envPortMatch) {
+        result.port = parseInt(envPortMatch[1], 10);
+      } else {
+        const exposeMatch = dockerContent.match(/^EXPOSE\s+(\d+)/m);
+        if (exposeMatch) {
+          const exposedPort = parseInt(exposeMatch[1], 10);
+          if (exposedPort !== result.port) {
+            result.port = exposedPort;
+          }
         }
-      }
-      // Also detect nginx-based images (port 80 by default even without EXPOSE)
-      if (dockerContent.match(/FROM\s+nginx/i) && !dockerContent.match(/^EXPOSE/m)) {
-        result.port = 80;
+        // Also detect nginx-based images (port 80 by default even without EXPOSE)
+        if (dockerContent.match(/FROM\s+nginx/i) && !dockerContent.match(/^EXPOSE/m)) {
+          result.port = 80;
+        }
       }
     }
   }

@@ -83,6 +83,7 @@ export interface ScanReport {
   autoFixes: AutoFixRecord[];
   threatSummary: string;
   costEstimate: CostEstimate | null;
+  resourcePlan: ResourcePlan | null;
   status: 'scanning' | 'completed' | 'failed';
   createdAt: Date;
 }
@@ -95,6 +96,87 @@ export interface AutoFixRecord {
   explanation: string;
   applied?: boolean;
   diff?: string;
+}
+
+// ─── Resource Requirements (LLM-detected external dependencies) ───
+
+export type ResourceType =
+  | 'redis'
+  | 'postgres'
+  | 'mysql'
+  | 'mongodb'
+  | 'object_storage'
+  | 'smtp'
+  | 'external_api'  // e.g. Stripe, OpenAI — user must provide their own key
+  | 'unknown';
+
+export type ResourceUseCase =
+  | 'cache'
+  | 'queue'           // BullMQ, Redis queue
+  | 'pubsub'
+  | 'session_store'
+  | 'primary_database'
+  | 'rate_limiting'
+  | 'file_storage'
+  | 'email'
+  | 'payment'
+  | 'ai_llm'
+  | 'other';
+
+export type ProvisioningStrategy =
+  | 'auto_provision'     // deploy-agent will provision (shared Redis, Cloud SQL)
+  | 'user_provided'      // user must supply the URL/key
+  | 'already_configured' // env var already set by user
+  | 'skip';              // not strictly needed
+
+export interface ResourceRequirement {
+  /** External service type */
+  type: ResourceType;
+  /** What the project uses it for */
+  useCase: ResourceUseCase;
+  /** Is this required for the app to start, or optional? */
+  required: boolean;
+  /** LLM's reasoning why this is needed (shown to user) */
+  reasoning: string;
+  /** Evidence from the code (import statements, env vars, etc.) */
+  evidence: string[];
+  /** How should this be provisioned? */
+  strategy: ProvisioningStrategy;
+  /** Env vars that will be set for this resource */
+  envVars: Array<{
+    key: string;
+    description: string;
+    required: boolean;
+    example?: string;
+  }>;
+  /** Size/tier recommendation (e.g. "small", "1GB", "shared") */
+  sizing?: string;
+  /** Status of provisioning (filled in after provision step) */
+  provisioned?: {
+    success: boolean;
+    providerInfo?: string;
+    injectedEnvVars?: Record<string, string>;
+    error?: string;
+  };
+}
+
+export interface ResourcePlan {
+  /** LLM-generated deployment plan summary (bilingual) */
+  summary: string;
+  /** List of detected resource requirements */
+  requirements: ResourceRequirement[];
+  /** Env vars the user still needs to provide manually */
+  missingUserEnvVars: Array<{
+    key: string;
+    description: string;
+    example?: string;
+  }>;
+  /** LLM provider used */
+  provider: 'claude' | 'openai' | 'fallback';
+  /** Can deploy proceed automatically? */
+  canAutoDeploy: boolean;
+  /** Blocking issues that prevent auto-deploy */
+  blockers: string[];
 }
 
 export interface CostEstimate {

@@ -66,8 +66,29 @@ interface ScanReport {
   autoFixes: AutoFixRecord[];
   threatSummary: string;
   costEstimate: { monthlyTotal: number; breakdown: { compute: number; storage: number; networking: number; ssl: number } } | null;
+  resourcePlan: ResourcePlan | null;
   status: string;
   createdAt: string;
+}
+
+interface ResourceRequirement {
+  type: string;
+  useCase: string;
+  required: boolean;
+  reasoning: string;
+  evidence: string[];
+  strategy: 'auto_provision' | 'user_provided' | 'already_configured' | 'skip';
+  envVars: Array<{ key: string; description: string; required: boolean; example?: string }>;
+  sizing?: string;
+}
+
+interface ResourcePlan {
+  summary: string;
+  requirements: ResourceRequirement[];
+  missingUserEnvVars: Array<{ key: string; description: string; example?: string }>;
+  provider: string;
+  canAutoDeploy: boolean;
+  blockers: string[];
 }
 
 interface Deployment {
@@ -512,6 +533,9 @@ function ScanReportSection({ scanReport, projectStatus, projectId }: { scanRepor
             </div>
           )}
 
+          {/* Resource Plan */}
+          {scanReport.resourcePlan && <ResourcePlanCard plan={scanReport.resourcePlan} />}
+
           {/* Threat summary */}
           {scanReport.threatSummary && (
             <div style={{ marginBottom: 16 }}>
@@ -571,6 +595,98 @@ const SEVERITY_COLORS: Record<string, string> = {
   medium: '#d29922',
   low: '#8b949e',
 };
+
+function ResourcePlanCard({ plan }: { plan: ResourcePlan }) {
+  const [expanded, setExpanded] = useState(true);
+
+  const strategyLabel: Record<string, { label: string; color: string }> = {
+    auto_provision: { label: '自動配置 / Auto-provision', color: '#3fb950' },
+    user_provided: { label: '需提供 / User-provided', color: '#d29922' },
+    already_configured: { label: '已配置 / Configured', color: '#58a6ff' },
+    skip: { label: '略過 / Skip', color: '#8b949e' },
+  };
+
+  return (
+    <div style={{ marginBottom: 16, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-primary)' }}>
+      <div
+        style={{ padding: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{expanded ? '▼' : '▶'}</span>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>
+            部署計畫 / Deployment Plan ({plan.requirements.length} resources)
+          </span>
+          {plan.canAutoDeploy ? (
+            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'rgba(63,185,80,0.15)', color: '#3fb950' }}>
+              可自動部署 / Auto-deployable
+            </span>
+          ) : (
+            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'rgba(210,153,34,0.15)', color: '#d29922' }}>
+              需手動配置 / Manual config needed
+            </span>
+          )}
+        </div>
+        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{plan.provider}</span>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: '0 12px 12px 12px', borderTop: '1px solid var(--border)' }}>
+          {plan.summary && (
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '12px 0', lineHeight: 1.6 }}>
+              {plan.summary}
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {plan.requirements.map((req, i) => {
+              const s = strategyLabel[req.strategy] ?? { label: req.strategy, color: '#8b949e' };
+              return (
+                <div key={i} style={{ padding: 10, background: 'var(--bg-tertiary)', borderRadius: 4, fontSize: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{req.type}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>({req.useCase})</span>
+                      {req.required && (
+                        <span style={{ fontSize: 10, color: '#f85149' }}>REQUIRED</span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: `${s.color}22`, color: s.color }}>
+                      {s.label}
+                    </span>
+                  </div>
+                  <div style={{ color: 'var(--text-secondary)', marginBottom: 6, lineHeight: 1.5 }}>{req.reasoning}</div>
+                  {req.envVars.length > 0 && (
+                    <div style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-secondary)' }}>
+                      env: {req.envVars.map((e) => e.key).join(', ')}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {plan.missingUserEnvVars.length > 0 && (
+            <div style={{ marginTop: 10, padding: 10, background: 'rgba(210,153,34,0.08)', borderRadius: 4, fontSize: 12 }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>需要使用者提供 / User must provide:</div>
+              {plan.missingUserEnvVars.map((v, i) => (
+                <div key={i} style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-secondary)' }}>
+                  {v.key} — {v.description}
+                </div>
+              ))}
+            </div>
+          )}
+          {plan.blockers.length > 0 && (
+            <div style={{ marginTop: 10, padding: 10, background: 'rgba(248,81,73,0.08)', borderRadius: 4, fontSize: 12 }}>
+              <div style={{ fontWeight: 600, color: '#f85149', marginBottom: 6 }}>部署阻礙 / Blockers:</div>
+              {plan.blockers.map((b, i) => (
+                <div key={i} style={{ color: 'var(--text-secondary)' }}>{b}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SeverityBadge({ severity, count }: { severity: string; count: number }) {
   return (

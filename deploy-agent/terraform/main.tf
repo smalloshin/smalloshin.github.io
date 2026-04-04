@@ -93,10 +93,90 @@ resource "google_cloud_run_v2_service" "api" {
   }
 }
 
+# ─── Shared Redis VM ──────────────────────────────────────────────────────────
+# A single e2-micro VM running Redis 7 in a Docker container, shared across
+# all deployed projects. Each project gets its own logical DB (0-15) allocated
+# by redis-provisioner.ts.
+
+resource "google_compute_firewall" "redis_internal" {
+  name    = "shared-redis-internal"
+  network = "default"
+
+  allow {
+    protocol = "tcp"
+    ports    = ["6379"]
+  }
+
+  # Only allow from internal IPs (Cloud Run VPC connector + GCE)
+  source_ranges = ["10.0.0.0/8"]
+  target_tags   = ["shared-redis"]
+}
+
+resource "google_compute_instance" "shared_redis" {
+  name         = "shared-redis"
+  machine_type = "e2-micro"
+  zone         = var.redis_zone
+
+  tags = ["shared-redis"]
+
+  boot_disk {
+    initialize_params {
+      image = "cos-cloud/cos-stable"
+      size  = 10
+    }
+  }
+
+  network_interface {
+    network = "default"
+    access_config {
+      # Ephemeral public IP — can be removed once VPC connector is set up
+    }
+  }
+
+  metadata = {
+    # Run Redis 7 container on boot via cloud-init on Container-Optimized OS.
+    # Redis is configured with appendonly persistence and optional requirepass.
+    gce-container-declaration = yamlencode({
+      spec = {
+        containers = [{
+          name  = "redis"
+          image = "redis:7-alpine"
+          args  = compact([
+            "redis-server",
+            "--appendonly", "yes",
+            "--maxmemory", "200mb",
+            "--maxmemory-policy", "allkeys-lru",
+            var.redis_password != "" ? "--requirepass" : "",
+            var.redis_password,
+          ])
+          volumeMounts = [{
+            name      = "redis-data"
+            mountPath = "/data"
+          }]
+        }]
+        volumes = [{
+          name = "redis-data"
+          hostPath = { path = "/var/lib/redis" }
+        }]
+        restartPolicy = "Always"
+      }
+    })
+  }
+
+  service_account {
+    scopes = ["logging-write", "monitoring-write"]
+  }
+}
+
 output "api_url" {
   value = google_cloud_run_v2_service.api.uri
 }
 
 output "db_connection_name" {
   value = google_sql_database_instance.deploy_agent.connection_name
+}
+
+output "shared_redis_internal_ip" {
+  description = "Set this as SHARED_REDIS_HOST on the deploy-agent API service"
+  value       = google_compute_instance.shared_redis.network_interface[0].network_ip
 }

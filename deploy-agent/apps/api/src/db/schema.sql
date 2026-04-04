@@ -32,11 +32,15 @@ CREATE TABLE IF NOT EXISTS scan_reports (
   verification_results JSONB,
   threat_summary TEXT,
   cost_estimate JSONB,
+  resource_plan JSONB,
   status VARCHAR(50) NOT NULL DEFAULT 'scanning',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_scan_reports_project ON scan_reports(project_id);
+
+-- Migration for existing installs: add resource_plan column if missing
+ALTER TABLE scan_reports ADD COLUMN IF NOT EXISTS resource_plan JSONB;
 
 -- Reviews
 CREATE TABLE IF NOT EXISTS reviews (

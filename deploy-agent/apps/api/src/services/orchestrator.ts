@@ -91,6 +91,7 @@ export async function updateScanReport(
     verificationResults: unknown;
     threatSummary: string;
     costEstimate: unknown;
+    resourcePlan: unknown;
     status: string;
   }>
 ): Promise<ScanReport> {
@@ -105,6 +106,7 @@ export async function updateScanReport(
   if (updates.verificationResults !== undefined) { sets.push(`verification_results = $${idx++}`); params.push(JSON.stringify(updates.verificationResults)); }
   if (updates.threatSummary !== undefined) { sets.push(`threat_summary = $${idx++}`); params.push(updates.threatSummary); }
   if (updates.costEstimate !== undefined) { sets.push(`cost_estimate = $${idx++}`); params.push(JSON.stringify(updates.costEstimate)); }
+  if (updates.resourcePlan !== undefined) { sets.push(`resource_plan = $${idx++}`); params.push(JSON.stringify(updates.resourcePlan)); }
   if (updates.status !== undefined) { sets.push(`status = $${idx++}`); params.push(updates.status); }
 
   params.push(id);
@@ -296,6 +298,7 @@ function rowToScanReport(row: Record<string, unknown>): ScanReport {
     autoFixes: mergedAutoFixes as unknown as ScanReport['autoFixes'],
     threatSummary: (row.threat_summary as string) ?? '',
     costEstimate: row.cost_estimate as ScanReport['costEstimate'],
+    resourcePlan: (parseJsonField(row.resource_plan) as ScanReport['resourcePlan']) ?? null,
     status: row.status as ScanReport['status'],
     createdAt: new Date(row.created_at as string),
   };
