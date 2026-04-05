@@ -327,7 +327,7 @@ export async function runDeployPipeline(
       cpu: '1',
       minInstances: 0,
       maxInstances: 10,
-      allowUnauthenticated: project.config?.allowUnauthenticated ?? false,
+      allowUnauthenticated: project.config?.allowUnauthenticated ?? true,
       port,
       cloudSqlInstance,
       vpcEgress: needsVpcEgress ? {
@@ -384,7 +384,7 @@ export async function runDeployPipeline(
           cpu: '1',
           minInstances: 0,
           maxInstances: 10,
-          allowUnauthenticated: project.config?.allowUnauthenticated ?? false,
+          allowUnauthenticated: project.config?.allowUnauthenticated ?? true,
           port,
           cloudSqlInstance,
         }, buildResult.imageUri);
