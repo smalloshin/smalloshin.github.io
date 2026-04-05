@@ -41,12 +41,14 @@ locals {
     "roles/iam.serviceAccountUser",       # act as service accounts
     "roles/artifactregistry.writer",      # push images
     "roles/cloudbuild.builds.editor",     # trigger Cloud Build
-    "roles/storage.objectAdmin",          # GCS tarballs + build sources
+    "roles/storage.admin",                # GCS tarballs + build sources + bucket metadata
     "roles/cloudsql.client",              # connect to Cloud SQL
     "roles/cloudsql.instanceUser",        # IAM DB auth (if used)
     "roles/secretmanager.secretAccessor", # read secrets at runtime
     "roles/compute.networkUser",          # Direct VPC egress
     "roles/dns.admin",                    # (reserved for future Cloud DNS)
+    "roles/logging.logWriter",            # Cloud Run writes logs
+    "roles/monitoring.metricWriter",      # Cloud Run writes metrics
   ]
 }
 
