@@ -416,12 +416,14 @@ export async function runDeployPipeline(
           zoneName: cfZoneName,
         };
 
+        const forceDomain = Boolean(project.config?.forceDomain);
         const domainResult = await setupCustomDomainWithDns(
           dnsConfig,
           deployResult.serviceUrl ?? '',
           gcpProject,
           gcpRegion,
-          deployResult.serviceName
+          deployResult.serviceName,
+          { force: forceDomain }
         );
 
         if (domainResult.success) {

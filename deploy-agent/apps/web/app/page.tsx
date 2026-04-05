@@ -252,6 +252,7 @@ function SubmitModal({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [domainConflict, setDomainConflict] = useState<{ fqdn: string; existingRoute: string } | null>(null);
 
   const handleFile = (f: File) => {
     const validTypes = ['.zip', '.tar.gz', '.tgz', '.tar'];
@@ -269,19 +270,17 @@ function SubmitModal({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
     }
   };
 
-  const handleSubmit = async () => {
-    if (!name.trim()) { setError('請輸入專案名稱'); return; }
-    if (sourceType === 'upload' && !file) { setError('請上傳專案壓縮檔'); return; }
-    if (sourceType === 'git' && !gitUrl.trim()) { setError('請輸入 Git URL'); return; }
-
+  const doSubmit = async (forceDomain: boolean) => {
     setSubmitting(true);
     setError(null);
+    setDomainConflict(null);
 
     try {
       const formData = new FormData();
       formData.append('name', name.trim());
       formData.append('sourceType', sourceType);
       formData.append('customDomain', customDomain.trim());
+      formData.append('forceDomain', String(forceDomain));
       formData.append('allowUnauthenticated', String(allowUnauth));
       if (envVarsText.trim()) {
         formData.append('envVars', envVarsText.trim());
@@ -307,6 +306,36 @@ function SubmitModal({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
       setError((err as Error).message);
       setSubmitting(false);
     }
+  };
+
+  const handleSubmit = async () => {
+    if (!name.trim()) { setError('請輸入專案名稱'); return; }
+    if (sourceType === 'upload' && !file) { setError('請上傳專案壓縮檔'); return; }
+    if (sourceType === 'git' && !gitUrl.trim()) { setError('請輸入 Git URL'); return; }
+
+    // Pre-flight: check custom domain for conflicts (if user set one)
+    if (customDomain.trim()) {
+      setSubmitting(true);
+      setError(null);
+      try {
+        // Check both the main domain and the api.* variant (for monorepos)
+        const subs = [customDomain.trim(), `api.${customDomain.trim()}`];
+        for (const sub of subs) {
+          const res = await fetch(`${API}/api/infra/check-domain?subdomain=${encodeURIComponent(sub)}&zone=punwave.com`);
+          const data = await res.json();
+          if (res.ok && data.available === false) {
+            setDomainConflict({ fqdn: data.fqdn, existingRoute: data.existingRoute });
+            setSubmitting(false);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Domain pre-check failed:', err);
+        // Don't block submission if pre-check fails — backend will enforce
+      }
+    }
+
+    await doSubmit(false);
   };
 
   return (
@@ -461,6 +490,79 @@ function SubmitModal({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
           <button className="btn" onClick={onClose} disabled={submitting}>取消</button>
           <button className="btn btn-primary" onClick={handleSubmit} disabled={submitting}>
             {submitting ? '上傳掃描中...' : '提交掃描'}
+          </button>
+        </div>
+      </div>
+
+      {domainConflict && (
+        <DomainConflictModal
+          conflict={domainConflict}
+          onCancel={() => setDomainConflict(null)}
+          onConfirm={async () => {
+            await doSubmit(true);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function DomainConflictModal({
+  conflict,
+  onCancel,
+  onConfirm,
+}: {
+  conflict: { fqdn: string; existingRoute: string };
+  onCancel: () => void;
+  onConfirm: () => void | Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100,
+      }}
+      onClick={onCancel}
+    >
+      <div
+        style={{
+          background: 'var(--bg-secondary)', borderRadius: 12, padding: 24,
+          width: 480, maxWidth: '90vw', border: '1px solid var(--status-warning, #d29922)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: 'var(--status-warning, #d29922)' }}>
+          ⚠ 網域已被佔用
+        </h3>
+        <p style={{ fontSize: 14, color: 'var(--text-primary)', marginBottom: 8, lineHeight: 1.6 }}>
+          <code style={{ background: 'var(--bg-primary)', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>
+            {conflict.fqdn}
+          </code>
+          {' '}目前被指向服務：
+        </p>
+        <p style={{ fontSize: 14, marginBottom: 12 }}>
+          <code style={{ background: 'var(--bg-primary)', padding: '2px 6px', borderRadius: 4, fontSize: 13, color: 'var(--accent)' }}>
+            {conflict.existingRoute}
+          </code>
+        </p>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20, lineHeight: 1.6 }}>
+          強制覆蓋會把這個網域改指向新服務，
+          <strong style={{ color: 'var(--status-critical)' }}>並會讓原本的服務失去這個網域</strong>。
+          確定要繼續嗎？
+        </p>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn" onClick={onCancel} disabled={busy}>取消</button>
+          <button
+            className="btn"
+            style={{ background: 'var(--status-critical)', color: '#fff', borderColor: 'var(--status-critical)' }}
+            onClick={async () => {
+              setBusy(true);
+              try { await onConfirm(); } finally { setBusy(false); }
+            }}
+            disabled={busy}
+          >
+            {busy ? '處理中...' : '強制覆蓋'}
           </button>
         </div>
       </div>

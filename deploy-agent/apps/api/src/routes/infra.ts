@@ -194,6 +194,45 @@ async function findOrphans() {
 // ─── Routes ──────────────────────────────────────────────────────────
 
 export async function infraRoutes(app: FastifyInstance) {
+  // Check if a custom domain is already mapped to another Cloud Run service.
+  // Used by the deploy form UI to warn before creating a conflicting mapping.
+  //
+  // Query: ?domain=luca-app.punwave.com (full FQDN)
+  //        OR ?subdomain=luca-app&zone=punwave.com
+  // Response:
+  //   { available: true }                                     — no conflict
+  //   { available: false, existingRoute: "da-luca-frontend" } — conflict
+  app.get('/api/infra/check-domain', async (req, reply) => {
+    const q = req.query as { domain?: string; subdomain?: string; zone?: string };
+    let fqdn = q.domain?.trim() ?? '';
+    if (!fqdn && q.subdomain && q.zone) {
+      fqdn = `${q.subdomain.trim()}.${q.zone.trim()}`;
+    }
+    if (!fqdn) {
+      return reply.status(400).send({ error: 'domain or (subdomain + zone) required' });
+    }
+
+    try {
+      const url = `https://${GCP_REGION}-run.googleapis.com/apis/domains.cloudrun.com/v1/namespaces/${GCP_PROJECT}/domainmappings/${fqdn}`;
+      const res = await gcpFetch(url);
+      if (res.status === 404) {
+        return { available: true, fqdn };
+      }
+      if (!res.ok) {
+        return reply.status(500).send({ error: `domain mapping lookup failed: HTTP ${res.status}` });
+      }
+      const body = await res.json() as { spec?: { routeName?: string } };
+      const existingRoute = body.spec?.routeName ?? null;
+      return {
+        available: false,
+        fqdn,
+        existingRoute,
+      };
+    } catch (err) {
+      return reply.status(500).send({ error: (err as Error).message });
+    }
+  });
+
   // Full overview (used by /infra page)
   app.get('/api/infra/overview', async (_req, reply) => {
     try {

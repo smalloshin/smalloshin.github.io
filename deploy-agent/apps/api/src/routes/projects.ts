@@ -84,6 +84,7 @@ const submitSchema = z.object({
   config: z.object({
     deployTarget: z.enum(['cloud_run']).default('cloud_run'),
     customDomain: z.string().optional(),
+    forceDomain: z.boolean().default(false),  // Override existing mapping if conflict detected
     allowUnauthenticated: z.boolean().default(true),  // Public by default
     gcpProject: z.string().optional(),
     gcpRegion: z.string().optional(),
@@ -136,6 +137,7 @@ export async function projectRoutes(app: FastifyInstance) {
 
     let name = '';
     let customDomain = '';
+    let forceDomain = false;
     let allowUnauthenticated = false;
     let sourceType: 'upload' | 'git' = 'upload';
     let gitUrl = '';
@@ -148,6 +150,7 @@ export async function projectRoutes(app: FastifyInstance) {
         const val = String(part.value);
         if (part.fieldname === 'name') name = val;
         else if (part.fieldname === 'customDomain') customDomain = val;
+        else if (part.fieldname === 'forceDomain') forceDomain = val === 'true';
         else if (part.fieldname === 'allowUnauthenticated') allowUnauthenticated = val === 'true';
         else if (part.fieldname === 'sourceType') sourceType = val as 'upload' | 'git';
         else if (part.fieldname === 'gitUrl') gitUrl = val;
@@ -175,6 +178,7 @@ export async function projectRoutes(app: FastifyInstance) {
         config: {
           deployTarget: 'cloud_run',
           customDomain: customDomain.trim() || undefined,
+          forceDomain,
           allowUnauthenticated,
           envVars: Object.keys(userEnvVars).length > 0 ? userEnvVars : undefined,
         },
@@ -346,6 +350,7 @@ export async function projectRoutes(app: FastifyInstance) {
             customDomain: customDomain.trim()
               ? (svc.role === 'frontend' ? customDomain.trim() : `api.${customDomain.trim()}`)
               : undefined,
+            forceDomain,
             allowUnauthenticated,
             gcsSourceUri,
             envVars: Object.keys(userEnvVars).length > 0 ? userEnvVars : undefined,
@@ -397,6 +402,7 @@ export async function projectRoutes(app: FastifyInstance) {
       config: {
         deployTarget: 'cloud_run',
         customDomain: customDomain.trim() || undefined,
+        forceDomain,
         allowUnauthenticated,
         gcsSourceUri,  // persisted source for deploy step
         envVars: Object.keys(userEnvVars).length > 0 ? userEnvVars : undefined,
