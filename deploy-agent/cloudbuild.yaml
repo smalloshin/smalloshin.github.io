@@ -39,6 +39,8 @@ steps:
       - '4Gi'
       - '--cpu'
       - '2'
+      - '--service-account'
+      - 'deploy-agent@${PROJECT_ID}.iam.gserviceaccount.com'
       - '--allow-unauthenticated'
       - '--quiet'
 
@@ -54,6 +56,8 @@ steps:
       - '${_REGION}'
       - '--platform'
       - 'managed'
+      - '--service-account'
+      - 'deploy-agent@${PROJECT_ID}.iam.gserviceaccount.com'
       - '--allow-unauthenticated'
       - '--quiet'
 
