@@ -4,13 +4,22 @@
 
 ## 上次進度（Last Progress）
 
+**2026-04-05（凌晨，一步一步做完為止）**
+
+- ✅ 明文 secrets migrate 完成：prod Cloud Run 已用 `--update-secrets` 切到 Secret Manager，新 revision 服務正常
+- ✅ Terraform import 完成：30+ 現有 prod 資源全部納入 TF state（12 APIs、GCS bucket、AR repo、SQL instance+db+user、Redis firewall+VM、6 secrets × 3）
+- ✅ Terraform apply 完成：19 added / 11 changed / **0 destroyed**
+  - 建立 `deploy-agent@` service account + 10 個 IAM roles
+  - Cloud SQL 啟用 backup + PITR（原 prod backups 是關的 ⚠）+ maintenance_window + query insights
+  - 6 個 secrets 加上 agent SA accessor binding + default compute SA 過渡期 binding
+  - Cloud Build SA 加上 run.admin + iam.serviceAccountUser
+- ✅ `terraform plan` 現在 **No changes** — prod infra 與 TF config 完全對齊
+- ✅ Agent API 驗證通過：`/api/projects` 200、`/api/infra/overview` 200
+- ⏸️ services.tf + domains.tf 暫放 `.deferred`（等 prod Cloud Run 遷到 deploy-agent@ SA 後再接管）
+
 **2026-04-05（深夜）**
 
 - ✅ Terraform DR 系統：9 個 .tf 檔 + `bootstrap.sh` + `README.md` + `terraform.tfvars.example`
-  - 涵蓋：APIs、dedicated SA+IAM、Secret Manager（6 secrets）、GCS+lifecycle、AR+cleanup、Cloud SQL（backup+PITR+deletion_protection）、Redis VM、Cloud Run api+web（secrets 由 Secret Manager 注入）、domain mappings
-  - Remote state 在 `${project}-tfstate` GCS bucket（versioned）
-  - **尚未跑過**：需在 throwaway project 驗證
-- ⚠️ **發現安全問題**：現 prod Cloud Run env vars 有 6 個明文 secrets（Anthropic/OpenAI keys、GitHub PAT、Cloudflare token、DB password、Redis password）→ TF 已把它們全部搬到 Secret Manager，但 live prod 還沒 migrate
 - ✅ 第 3 份 decision 檔：`2026-04-05-terraform-disaster-recovery.md`
 
 **2026-04-05（晚上）**
@@ -55,8 +64,9 @@
 - [x] ~~**Dashboard GCP 資源管理頁**~~（2026-04-05 完成：`/infra` 頁 + orphan cleanup 一鍵清理）
 - [ ] **執行 orphan cleanup**：首次清理 39 個 tarball + 1 AR package（用 dashboard 按鈕即可）
 - [ ] **驗證 bootstrap.sh**：在 throwaway GCP project 跑一次完整 `./terraform/bootstrap.sh`
-- [ ] **migrate prod secrets 到 Secret Manager**：目前 6 個 keys 是明文 env vars，高風險
-- [ ] **Terraform import 現有 prod 資源**：寫 `terraform/IMPORT.md` 並執行，讓 TF 實際管住現況（消除 drift risk）
+- [x] ~~**migrate prod secrets 到 Secret Manager**~~（2026-04-05 完成）
+- [x] ~~**Terraform import 現有 prod 資源**~~（2026-04-05 完成：30+ resources, 0 drift）
+- [ ] **遷移 prod Cloud Run 到 deploy-agent@ SA**：目前還用 default compute SA，遷完後把 services.tf.deferred + domains.tf.deferred 接管起來
 
 ### 中優先
 - [ ] Terraform for agent 自身 infra（目前是手動 gcloud deploy）

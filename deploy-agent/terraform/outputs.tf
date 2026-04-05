@@ -1,13 +1,3 @@
-output "api_url" {
-  description = "Cloud Run auto-generated URL for the API"
-  value       = google_cloud_run_v2_service.api.uri
-}
-
-output "web_url" {
-  description = "Cloud Run auto-generated URL for the Web UI"
-  value       = google_cloud_run_v2_service.web.uri
-}
-
 output "db_connection_name" {
   description = "Cloud SQL connection name (used in DATABASE_URL socket path)"
   value       = google_sql_database_instance.deploy_agent.connection_name
@@ -23,10 +13,6 @@ output "agent_service_account" {
   value       = google_service_account.agent.email
 }
 
-output "dns_records_to_create" {
-  description = "CNAME records to create in Cloudflare (or other DNS)"
-  value = {
-    (var.api_domain) = "ghs.googlehosted.com."
-    (var.web_domain) = "ghs.googlehosted.com."
-  }
-}
+# NOTE: Cloud Run services + domain mappings are currently managed by
+# cloudbuild.yaml + gcloud (services.tf.deferred + domains.tf.deferred).
+# Migrate to TF once prod Cloud Run SA aligns with deploy-agent@ SA.

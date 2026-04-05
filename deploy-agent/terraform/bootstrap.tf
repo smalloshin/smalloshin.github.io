@@ -19,8 +19,8 @@ locals {
 }
 
 resource "google_project_service" "enabled" {
-  for_each = toset(local.required_apis)
-  service  = each.value
+  for_each           = toset(local.required_apis)
+  service            = each.value
   disable_on_destroy = false
 }
 
@@ -37,16 +37,16 @@ resource "google_service_account" "agent" {
 # IAM roles the agent needs to manage deployed projects + its own infra
 locals {
   agent_roles = [
-    "roles/run.admin",                   # deploy/manage Cloud Run services
-    "roles/iam.serviceAccountUser",      # act as service accounts
-    "roles/artifactregistry.writer",     # push images
-    "roles/cloudbuild.builds.editor",    # trigger Cloud Build
-    "roles/storage.objectAdmin",         # GCS tarballs + build sources
-    "roles/cloudsql.client",             # connect to Cloud SQL
-    "roles/cloudsql.instanceUser",       # IAM DB auth (if used)
-    "roles/secretmanager.secretAccessor",# read secrets at runtime
-    "roles/compute.networkUser",         # Direct VPC egress
-    "roles/dns.admin",                   # (reserved for future Cloud DNS)
+    "roles/run.admin",                    # deploy/manage Cloud Run services
+    "roles/iam.serviceAccountUser",       # act as service accounts
+    "roles/artifactregistry.writer",      # push images
+    "roles/cloudbuild.builds.editor",     # trigger Cloud Build
+    "roles/storage.objectAdmin",          # GCS tarballs + build sources
+    "roles/cloudsql.client",              # connect to Cloud SQL
+    "roles/cloudsql.instanceUser",        # IAM DB auth (if used)
+    "roles/secretmanager.secretAccessor", # read secrets at runtime
+    "roles/compute.networkUser",          # Direct VPC egress
+    "roles/dns.admin",                    # (reserved for future Cloud DNS)
   ]
 }
 

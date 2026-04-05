@@ -11,12 +11,14 @@ resource "google_sql_database_instance" "deploy_agent" {
 
     ip_configuration {
       ipv4_enabled = true
-      # Accept connections from any IP; Cloud SQL Auth Proxy + IAM roles
-      # gate actual access. Fine for a single-operator deployment.
+      authorized_networks {
+        name  = "operator-home"
+        value = "114.137.144.128/32"
+      }
     }
 
     backup_configuration {
-      enabled                        = true
+      enabled                        = true # ⚠ was disabled in prod pre-terraform
       start_time                     = "18:00"
       point_in_time_recovery_enabled = true
       transaction_log_retention_days = 7

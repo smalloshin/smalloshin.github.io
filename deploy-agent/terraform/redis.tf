@@ -71,4 +71,14 @@ resource "google_compute_instance" "shared_redis" {
   }
 
   depends_on = [google_project_service.enabled]
+
+  lifecycle {
+    # Redis is running fine; don't trigger VM stop/restart for config drift.
+    # If you need to change these, set allow_stopping_for_update = true explicitly.
+    ignore_changes = [
+      service_account,
+      metadata,
+      machine_type,
+    ]
+  }
 }

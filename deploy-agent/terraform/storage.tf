@@ -1,22 +1,33 @@
 # Cloud Build sources bucket + Artifact Registry repo with cleanup policies.
 
 resource "google_storage_bucket" "cloudbuild" {
-  name                        = "${var.gcp_project}_cloudbuild"
-  location                    = var.gcp_region
-  uniform_bucket_level_access = true
-  force_destroy               = false
+  name     = "${var.gcp_project}_cloudbuild"
+  location = "US" # matches existing prod (multi-region); cannot relocate without recreate
+  force_destroy = false
 
   lifecycle_rule {
     action {
       type = "Delete"
     }
     condition {
-      age            = 30
-      matches_prefix = ["sources/"]
+      age              = 30
+      matches_prefix   = ["sources/"]
+      send_age_if_zero = true
+      with_state       = "ANY"
     }
   }
 
+  soft_delete_policy {
+    retention_duration_seconds = 604800 # 7 days
+  }
+
   depends_on = [google_project_service.enabled]
+
+  lifecycle {
+    ignore_changes = [
+      labels, # managed by Cloud Build, fluctuates
+    ]
+  }
 }
 
 resource "google_artifact_registry_repository" "deploy_agent" {
