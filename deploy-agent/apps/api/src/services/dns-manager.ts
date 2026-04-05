@@ -153,13 +153,55 @@ export async function deleteCname(config: DnsConfig): Promise<{ success: boolean
 
 // ─── Cloud Run domain mapping ───
 
+/**
+ * Look up an existing domain mapping. Returns the routeName it points to,
+ * or null if no mapping exists for this domain.
+ */
+async function getDomainMapping(
+  gcpProject: string,
+  gcpRegion: string,
+  domain: string
+): Promise<{ routeName: string | null; exists: boolean }> {
+  const url = `https://${gcpRegion}-run.googleapis.com/apis/domains.cloudrun.com/v1/namespaces/${gcpProject}/domainmappings/${domain}`;
+  const res = await gcpFetch(url);
+  if (res.status === 404) return { routeName: null, exists: false };
+  if (!res.ok) return { routeName: null, exists: false };
+  const body = await res.json() as { spec?: { routeName?: string } };
+  return { routeName: body.spec?.routeName ?? null, exists: true };
+}
+
 async function createDomainMapping(
   gcpProject: string,
   gcpRegion: string,
   serviceName: string,
-  domain: string
-): Promise<{ success: boolean; error: string | null }> {
+  domain: string,
+  opts: { force?: boolean } = {}
+): Promise<{ success: boolean; error: string | null; conflict?: { existingRoute: string } }> {
   try {
+    // Pre-check: is this domain already mapped to a different service?
+    const existing = await getDomainMapping(gcpProject, gcpRegion, domain);
+    if (existing.exists && existing.routeName && existing.routeName !== serviceName) {
+      if (!opts.force) {
+        return {
+          success: false,
+          error: `Domain ${domain} is already mapped to service "${existing.routeName}". ` +
+                 `Pass force=true to replace with "${serviceName}".`,
+          conflict: { existingRoute: existing.routeName },
+        };
+      }
+      // Force: delete the old mapping first
+      console.log(`  [domain] Force-replacing ${domain}: ${existing.routeName} → ${serviceName}`);
+      const deleteUrl = `https://${gcpRegion}-run.googleapis.com/apis/domains.cloudrun.com/v1/namespaces/${gcpProject}/domainmappings/${domain}`;
+      const delRes = await gcpFetch(deleteUrl, { method: 'DELETE' });
+      if (!delRes.ok && delRes.status !== 404) {
+        const body = await delRes.text();
+        return { success: false, error: `Failed to delete existing mapping: HTTP ${delRes.status}: ${body}` };
+      }
+    } else if (existing.exists && existing.routeName === serviceName) {
+      // Already mapped to the same service — nothing to do
+      return { success: true, error: null };
+    }
+
     const url = `https://${gcpRegion}-run.googleapis.com/apis/domains.cloudrun.com/v1/namespaces/${gcpProject}/domainmappings`;
     const res = await gcpFetch(url, {
       method: 'POST',
@@ -193,17 +235,23 @@ export async function setupCustomDomainWithDns(
   _cloudRunUrl: string,
   gcpProject: string,
   gcpRegion: string,
-  serviceName: string
-): Promise<{ success: boolean; customUrl: string; error: string | null }> {
+  serviceName: string,
+  opts: { force?: boolean } = {}
+): Promise<{ success: boolean; customUrl: string; error: string | null; conflict?: { existingRoute: string } }> {
   const fqdn = `${config.subdomain}.${config.zoneName}`;
 
   console.log(`\n  Setting up custom domain: ${fqdn}`);
 
-  // Step 1: Cloud Run domain mapping
+  // Step 1: Cloud Run domain mapping (with conflict detection)
   console.log('  Step 1: Cloud Run domain mapping...');
-  const mappingResult = await createDomainMapping(gcpProject, gcpRegion, serviceName, fqdn);
+  const mappingResult = await createDomainMapping(gcpProject, gcpRegion, serviceName, fqdn, opts);
   if (!mappingResult.success) {
-    return { success: false, customUrl: '', error: `Domain mapping failed: ${mappingResult.error}` };
+    return {
+      success: false,
+      customUrl: '',
+      error: `Domain mapping failed: ${mappingResult.error}`,
+      conflict: mappingResult.conflict,
+    };
   }
   console.log('  Domain mapping: OK');
 

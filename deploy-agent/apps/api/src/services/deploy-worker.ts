@@ -461,7 +461,16 @@ export async function runDeployPipeline(
             console.warn(`[Deploy]   SSL monitoring error: ${(sslErr as Error).message}, continuing`);
           }
         } else {
-          console.warn(`[Deploy]   Domain setup failed: ${domainResult.error}`);
+          if (domainResult.conflict) {
+            console.warn(
+              `[Deploy]   ⚠ DOMAIN CONFLICT: ${customDomainSubdomain}.${cfZoneName} is already mapped to ` +
+              `"${domainResult.conflict.existingRoute}" (not this service "${deployResult.serviceName}"). ` +
+              `Skipping custom domain to avoid breaking the other service. ` +
+              `Re-deploy with force_domain=true to override.`
+            );
+          } else {
+            console.warn(`[Deploy]   Domain setup failed: ${domainResult.error}`);
+          }
           // Continue without custom domain
         }
       } else {
