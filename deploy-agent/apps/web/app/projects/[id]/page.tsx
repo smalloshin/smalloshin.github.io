@@ -20,6 +20,7 @@ interface Project {
     allowUnauthenticated?: boolean;
     gcpProject?: string;
     gcpRegion?: string;
+    envVars?: Record<string, string>;
   };
   createdAt: string;
   updatedAt: string;
@@ -34,14 +35,60 @@ interface TimelineEntry {
   createdAt: string;
 }
 
+interface ScanFinding {
+  id: string;
+  tool: string;
+  category: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  title: string;
+  description: string;
+  filePath: string;
+  lineStart: number;
+  lineEnd: number;
+  action: 'auto_fix' | 'report_only';
+}
+
+interface AutoFixRecord {
+  findingId?: string;
+  filePath?: string;
+  originalCode?: string;
+  fixedCode?: string;
+  explanation: string;
+  applied?: boolean;
+  diff?: string;
+}
+
 interface ScanReport {
   id: string;
   projectId: string;
   version: number;
+  findings: ScanFinding[];
+  autoFixes: AutoFixRecord[];
   threatSummary: string;
   costEstimate: { monthlyTotal: number; breakdown: { compute: number; storage: number; networking: number; ssl: number } } | null;
+  resourcePlan: ResourcePlan | null;
   status: string;
   createdAt: string;
+}
+
+interface ResourceRequirement {
+  type: string;
+  useCase: string;
+  required: boolean;
+  reasoning: string;
+  evidence: string[];
+  strategy: 'auto_provision' | 'user_provided' | 'already_configured' | 'skip';
+  envVars: Array<{ key: string; description: string; required: boolean; example?: string }>;
+  sizing?: string;
+}
+
+interface ResourcePlan {
+  summary: string;
+  requirements: ResourceRequirement[];
+  missingUserEnvVars: Array<{ key: string; description: string; example?: string }>;
+  provider: string;
+  canAutoDeploy: boolean;
+  blockers: string[];
 }
 
 interface Deployment {
@@ -69,6 +116,7 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [showEnvEditor, setShowEnvEditor] = useState(false);
 
   const loadDetail = (silent = false) => {
     if (!silent) setLoading(true);
@@ -244,32 +292,17 @@ export default function ProjectDetailPage() {
         </Card>
       </div>
 
-      {/* Scan Report */}
-      {scanReport && (
-        <Card title="掃描報告" style={{ marginTop: 16 }}>
-          <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
-            <InfoRow label="Status" value={scanReport.status} />
-            <InfoRow label="Version" value={String(scanReport.version)} />
-            {scanReport.costEstimate && (
-              <InfoRow label="預估月費" value={`$${scanReport.costEstimate.monthlyTotal.toFixed(2)}/mo`} />
-            )}
-          </div>
-          {scanReport.threatSummary && (
-            <div>
-              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4, textTransform: 'uppercase' }}>
-                威脅摘要 / Review Report
-              </label>
-              <div style={{
-                background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 6,
-                padding: 12, fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 300,
-                overflowY: 'auto', fontFamily: 'monospace',
-              }}>
-                {scanReport.threatSummary}
-              </div>
-            </div>
-          )}
-        </Card>
+      {/* Environment Variables */}
+      {deployments.length > 0 && (
+        <EnvVarsSection
+          projectId={project.id}
+          expanded={showEnvEditor}
+          onToggle={() => setShowEnvEditor(!showEnvEditor)}
+        />
       )}
+
+      {/* Scan Report */}
+      {scanReport && <ScanReportSection scanReport={scanReport} projectStatus={project.status} projectId={project.id} />}
 
       {/* Pipeline Timeline */}
       <Card title="流程時間軸" style={{ marginTop: 16 }}>
@@ -423,6 +456,640 @@ function MetadataBlock({ metadata }: { metadata: Record<string, unknown> }) {
           {key.replace(/([A-Z])/g, ' $1').toLowerCase()}: <strong style={{ color: 'var(--text-primary)' }}>{val === null || val === undefined ? '' : typeof val === 'object' ? JSON.stringify(val) : String(val)}</strong>
         </span>
       ))}
+    </div>
+  );
+}
+
+function ScanReportSection({ scanReport, projectStatus, projectId }: { scanReport: ScanReport; projectStatus: string; projectId: string }) {
+  // After approval/deploying/live, default to collapsed; during scanning/review, default to expanded
+  const postReview = ['approved', 'deploying', 'deployed', 'ssl_provisioning', 'canary_check', 'live'].includes(projectStatus);
+  const [expanded, setExpanded] = useState(!postReview);
+
+  const findings = scanReport.findings ?? [];
+  const autoFixes = scanReport.autoFixes ?? [];
+  const criticalCount = findings.filter(f => f.severity === 'critical').length;
+  const highCount = findings.filter(f => f.severity === 'high').length;
+  const mediumCount = findings.filter(f => f.severity === 'medium').length;
+  const lowCount = findings.filter(f => f.severity === 'low').length;
+
+  return (
+    <div style={{
+      background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8,
+      padding: 16, marginTop: 16,
+    }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <h3 style={{ fontSize: 14, fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: 0.5, margin: 0 }}>
+          {expanded ? '\u25BC' : '\u25B6'}&nbsp; 掃描報告 / Security Report
+        </h3>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {findings.length > 0 && (
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              {findings.length} findings
+              {autoFixes.length > 0 && ` (${autoFixes.length} auto-fixed)`}
+            </span>
+          )}
+          <span className={`pill ${scanReport.status === 'completed' ? 'pill-live' : scanReport.status === 'scanning' ? 'pill-scanning' : 'pill-review'}`}>
+            {scanReport.status}
+          </span>
+          {scanReport.costEstimate && (
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              ~${scanReport.costEstimate.monthlyTotal.toFixed(2)}/mo
+            </span>
+          )}
+          {scanReport.status === 'completed' && (
+            <a
+              href={`${API}/api/projects/${projectId}/scan/report`}
+              download
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '4px 10px', fontSize: 12, fontWeight: 500,
+                background: 'var(--bg-tertiary)', color: 'var(--accent-blue)',
+                border: '1px solid var(--border)', borderRadius: 6,
+                textDecoration: 'none', cursor: 'pointer',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--border)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
+            >
+              <span style={{ fontSize: 14 }}>&#8681;</span> 下載報告
+            </a>
+          )}
+        </div>
+      </div>
+
+      {expanded && (
+        <div style={{ marginTop: 12 }}>
+          {/* Severity summary bar */}
+          {findings.length > 0 && (
+            <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+              {criticalCount > 0 && <SeverityBadge severity="critical" count={criticalCount} />}
+              {highCount > 0 && <SeverityBadge severity="high" count={highCount} />}
+              {mediumCount > 0 && <SeverityBadge severity="medium" count={mediumCount} />}
+              {lowCount > 0 && <SeverityBadge severity="low" count={lowCount} />}
+            </div>
+          )}
+
+          {/* Resource Plan */}
+          {scanReport.resourcePlan && <ResourcePlanCard plan={scanReport.resourcePlan} />}
+
+          {/* Threat summary */}
+          {scanReport.threatSummary && (
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4, textTransform: 'uppercase' }}>
+                威脅摘要 / Review Report
+              </label>
+              <div style={{
+                background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 6,
+                padding: 12, fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 300,
+                overflowY: 'auto', fontFamily: 'monospace',
+              }}>
+                {scanReport.threatSummary}
+              </div>
+            </div>
+          )}
+
+          {/* Findings list */}
+          {findings.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase' }}>
+                安全性問題 / Security Findings ({findings.length})
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {findings.map((f, i) => (
+                  <FindingCard key={f.id || i} finding={f} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Auto-fixes list */}
+          {autoFixes.length > 0 && (
+            <div>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase' }}>
+                自動修復 / Auto-Fixes ({autoFixes.length})
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {autoFixes.map((fix, i) => (
+                  <AutoFixCard key={i} fix={fix} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {findings.length === 0 && !scanReport.threatSummary && (
+            <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>掃描進行中... / Scanning in progress...</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SEVERITY_COLORS: Record<string, string> = {
+  critical: '#f85149',
+  high: '#db6d28',
+  medium: '#d29922',
+  low: '#8b949e',
+};
+
+function ResourcePlanCard({ plan }: { plan: ResourcePlan }) {
+  const [expanded, setExpanded] = useState(true);
+
+  const strategyLabel: Record<string, { label: string; color: string }> = {
+    auto_provision: { label: '自動配置 / Auto-provision', color: '#3fb950' },
+    user_provided: { label: '需提供 / User-provided', color: '#d29922' },
+    already_configured: { label: '已配置 / Configured', color: '#58a6ff' },
+    skip: { label: '略過 / Skip', color: '#8b949e' },
+  };
+
+  return (
+    <div style={{ marginBottom: 16, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-primary)' }}>
+      <div
+        style={{ padding: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{expanded ? '▼' : '▶'}</span>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>
+            部署計畫 / Deployment Plan ({plan.requirements.length} resources)
+          </span>
+          {plan.canAutoDeploy ? (
+            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'rgba(63,185,80,0.15)', color: '#3fb950' }}>
+              可自動部署 / Auto-deployable
+            </span>
+          ) : (
+            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'rgba(210,153,34,0.15)', color: '#d29922' }}>
+              需手動配置 / Manual config needed
+            </span>
+          )}
+        </div>
+        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{plan.provider}</span>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: '0 12px 12px 12px', borderTop: '1px solid var(--border)' }}>
+          {plan.summary && (
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '12px 0', lineHeight: 1.6 }}>
+              {plan.summary}
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {plan.requirements.map((req, i) => {
+              const s = strategyLabel[req.strategy] ?? { label: req.strategy, color: '#8b949e' };
+              return (
+                <div key={i} style={{ padding: 10, background: 'var(--bg-tertiary)', borderRadius: 4, fontSize: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{req.type}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>({req.useCase})</span>
+                      {req.required && (
+                        <span style={{ fontSize: 10, color: '#f85149' }}>REQUIRED</span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: `${s.color}22`, color: s.color }}>
+                      {s.label}
+                    </span>
+                  </div>
+                  <div style={{ color: 'var(--text-secondary)', marginBottom: 6, lineHeight: 1.5 }}>{req.reasoning}</div>
+                  {req.envVars.length > 0 && (
+                    <div style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-secondary)' }}>
+                      env: {req.envVars.map((e) => e.key).join(', ')}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {plan.missingUserEnvVars.length > 0 && (
+            <div style={{ marginTop: 10, padding: 10, background: 'rgba(210,153,34,0.08)', borderRadius: 4, fontSize: 12 }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>需要使用者提供 / User must provide:</div>
+              {plan.missingUserEnvVars.map((v, i) => (
+                <div key={i} style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-secondary)' }}>
+                  {v.key} — {v.description}
+                </div>
+              ))}
+            </div>
+          )}
+          {plan.blockers.length > 0 && (
+            <div style={{ marginTop: 10, padding: 10, background: 'rgba(248,81,73,0.08)', borderRadius: 4, fontSize: 12 }}>
+              <div style={{ fontWeight: 600, color: '#f85149', marginBottom: 6 }}>部署阻礙 / Blockers:</div>
+              {plan.blockers.map((b, i) => (
+                <div key={i} style={{ color: 'var(--text-secondary)' }}>{b}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SeverityBadge({ severity, count }: { severity: string; count: number }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 10px',
+      borderRadius: 12, fontSize: 12, fontWeight: 600,
+      background: `${SEVERITY_COLORS[severity]}20`,
+      color: SEVERITY_COLORS[severity],
+      border: `1px solid ${SEVERITY_COLORS[severity]}40`,
+    }}>
+      {count} {severity}
+    </span>
+  );
+}
+
+function FindingCard({ finding }: { finding: ScanFinding }) {
+  const [showDetail, setShowDetail] = useState(false);
+  const color = SEVERITY_COLORS[finding.severity] ?? '#8b949e';
+
+  return (
+    <div style={{
+      background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 6,
+      padding: '10px 12px', cursor: 'pointer',
+    }} onClick={() => setShowDetail(!showDetail)}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{
+          display: 'inline-block', padding: '1px 6px', borderRadius: 4,
+          fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+          background: `${color}20`, color, border: `1px solid ${color}40`,
+        }}>
+          {finding.severity}
+        </span>
+        <span style={{
+          display: 'inline-block', padding: '1px 6px', borderRadius: 4,
+          fontSize: 10, background: 'var(--bg-secondary)', color: 'var(--text-secondary)',
+          border: '1px solid var(--border)',
+        }}>
+          {finding.tool}
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', flex: 1 }}>
+          {finding.title}
+        </span>
+        {finding.action === 'auto_fix' && (
+          <span style={{ fontSize: 10, color: 'var(--status-live)', fontWeight: 600 }}>AUTO-FIXED</span>
+        )}
+      </div>
+      {showDetail && (
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+          <p style={{ margin: '0 0 4px' }}>{finding.description}</p>
+          {finding.filePath && (
+            <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--accent)' }}>
+              {finding.filePath}{finding.lineStart ? `:${finding.lineStart}` : ''}
+              {finding.lineEnd && finding.lineEnd !== finding.lineStart ? `-${finding.lineEnd}` : ''}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AutoFixCard({ fix }: { fix: AutoFixRecord }) {
+  const [showDiff, setShowDiff] = useState(false);
+  const isApplied = fix.applied !== false; // default true for old format
+  const statusColor = isApplied ? 'var(--status-live)' : 'var(--status-critical)';
+  const statusLabel = isApplied ? '\u2714 已修復' : '\u2718 未套用';
+
+  return (
+    <div style={{
+      background: isApplied ? 'rgba(63,185,80,0.05)' : 'rgba(248,81,73,0.05)',
+      border: `1px solid ${isApplied ? 'rgba(63,185,80,0.2)' : 'rgba(248,81,73,0.2)'}`,
+      borderRadius: 6, padding: '10px 12px', cursor: 'pointer',
+    }} onClick={() => setShowDiff(!showDiff)}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ color: statusColor, fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{statusLabel}</span>
+        <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>{fix.explanation}</span>
+        {fix.filePath && (
+          <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0 }}>{fix.filePath}</span>
+        )}
+      </div>
+      {showDiff && (fix.originalCode || fix.diff) && (
+        <div style={{ marginTop: 8 }}>
+          {fix.originalCode && fix.fixedCode ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 10, color: 'var(--status-critical)', marginBottom: 2, fontWeight: 600 }}>BEFORE</label>
+                <pre style={{
+                  background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.2)', borderRadius: 4,
+                  padding: 8, fontSize: 11, margin: 0, overflowX: 'auto', whiteSpace: 'pre-wrap',
+                  color: 'var(--text-secondary)', maxHeight: 200,
+                }}>{fix.originalCode}</pre>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 10, color: 'var(--status-live)', marginBottom: 2, fontWeight: 600 }}>AFTER</label>
+                <pre style={{
+                  background: 'rgba(63,185,80,0.08)', border: '1px solid rgba(63,185,80,0.2)', borderRadius: 4,
+                  padding: 8, fontSize: 11, margin: 0, overflowX: 'auto', whiteSpace: 'pre-wrap',
+                  color: 'var(--text-secondary)', maxHeight: 200,
+                }}>{fix.fixedCode}</pre>
+              </div>
+            </div>
+          ) : fix.diff ? (
+            <pre style={{
+              background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 4,
+              padding: 8, fontSize: 11, margin: 0, overflowX: 'auto', whiteSpace: 'pre-wrap',
+              color: 'var(--text-secondary)', maxHeight: 200,
+            }}>{fix.diff}</pre>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Environment Variables Section ─── */
+
+interface EnvEntry {
+  key: string;
+  value: string;
+  isNew?: boolean;
+}
+
+function EnvVarsSection({ projectId, expanded, onToggle }: {
+  projectId: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const [envVars, setEnvVars] = useState<{ key: string; maskedValue: string }[]>([]);
+  const [loadingEnv, setLoadingEnv] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editEntries, setEditEntries] = useState<EnvEntry[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [deleteKeys, setDeleteKeys] = useState<Set<string>>(new Set());
+
+  const loadEnvVars = () => {
+    setLoadingEnv(true);
+    fetch(`${API}/api/projects/${projectId}/env-vars`)
+      .then(r => r.json())
+      .then(d => {
+        setEnvVars(d.envVars ?? []);
+        setLoadingEnv(false);
+      })
+      .catch(() => setLoadingEnv(false));
+  };
+
+  useEffect(() => {
+    if (expanded) loadEnvVars();
+  }, [expanded]);
+
+  const startEditing = () => {
+    setEditEntries(envVars.map(v => ({ key: v.key, value: '', isNew: false })));
+    setDeleteKeys(new Set());
+    setEditing(true);
+    setSaveMsg(null);
+  };
+
+  const cancelEditing = () => {
+    setEditing(false);
+    setEditEntries([]);
+    setDeleteKeys(new Set());
+    setSaveMsg(null);
+  };
+
+  const addEntry = () => {
+    setEditEntries([...editEntries, { key: '', value: '', isNew: true }]);
+  };
+
+  const removeEntry = (idx: number) => {
+    const entry = editEntries[idx];
+    if (!entry.isNew) {
+      // Mark existing var for deletion by setting empty value
+      setDeleteKeys(prev => new Set(prev).add(entry.key));
+    }
+    setEditEntries(editEntries.filter((_, i) => i !== idx));
+  };
+
+  const updateEntry = (idx: number, field: 'key' | 'value', val: string) => {
+    const updated = [...editEntries];
+    updated[idx] = { ...updated[idx], [field]: val };
+    setEditEntries(updated);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveMsg(null);
+
+    // Build envVars object: only send entries with non-empty values (changed/new)
+    const envVarsObj: Record<string, string> = {};
+    for (const entry of editEntries) {
+      if (!entry.key.trim()) continue;
+      if (entry.value.trim() || entry.isNew) {
+        envVarsObj[entry.key.trim()] = entry.value;
+      }
+    }
+
+    if (Object.keys(envVarsObj).length === 0 && deleteKeys.size === 0) {
+      setSaveMsg({ type: 'error', text: '請至少修改一個環境變數的值 / Please change at least one value' });
+      setSaving(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API}/api/projects/${projectId}/env-vars`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ envVars: envVarsObj }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed to update');
+      setSaveMsg({ type: 'success', text: `已更新 ${data.updatedKeys?.length ?? 0} 個環境變數，Cloud Run 服務已同步` });
+      setEditing(false);
+      loadEnvVars();
+    } catch (err) {
+      setSaveMsg({ type: 'error', text: (err as Error).message });
+    }
+    setSaving(false);
+  };
+
+  const RESERVED_VARS = new Set(['PORT', 'K_SERVICE', 'K_REVISION', 'K_CONFIGURATION']);
+
+  return (
+    <div style={{
+      background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8,
+      padding: 16, marginTop: 16,
+    }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+        onClick={onToggle}
+      >
+        <h3 style={{ fontSize: 14, fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: 0.5, margin: 0 }}>
+          {expanded ? '\u25BC' : '\u25B6'}&nbsp; 環境變數 / Environment Variables
+        </h3>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+          {envVars.length} vars
+        </span>
+      </div>
+
+      {expanded && (
+        <div style={{ marginTop: 12 }}>
+          {loadingEnv ? (
+            <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>載入中...</p>
+          ) : (
+            <>
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                {!editing ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); startEditing(); }}
+                    style={{
+                      padding: '5px 14px', fontSize: 12, borderRadius: 6, border: '1px solid var(--accent)',
+                      background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
+                      fontWeight: 500,
+                    }}
+                  >
+                    編輯環境變數
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleSave(); }}
+                      disabled={saving}
+                      style={{
+                        padding: '5px 14px', fontSize: 12, borderRadius: 6, border: 'none',
+                        background: 'var(--accent)', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer',
+                        fontWeight: 500, opacity: saving ? 0.6 : 1,
+                      }}
+                    >
+                      {saving ? '儲存中...' : '儲存並部署'}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); cancelEditing(); }}
+                      style={{
+                        padding: '5px 14px', fontSize: 12, borderRadius: 6,
+                        border: '1px solid var(--border)', background: 'transparent',
+                        color: 'var(--text-secondary)', cursor: 'pointer',
+                      }}
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); addEntry(); }}
+                      style={{
+                        padding: '5px 14px', fontSize: 12, borderRadius: 6,
+                        border: '1px solid var(--border)', background: 'transparent',
+                        color: 'var(--status-live)', cursor: 'pointer', marginLeft: 'auto',
+                      }}
+                    >
+                      + 新增變數
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Status message */}
+              {saveMsg && (
+                <div style={{
+                  padding: '8px 12px', borderRadius: 6, marginBottom: 12, fontSize: 13,
+                  background: saveMsg.type === 'success' ? 'rgba(63,185,80,0.1)' : 'rgba(248,81,73,0.1)',
+                  border: `1px solid ${saveMsg.type === 'success' ? 'rgba(63,185,80,0.3)' : 'rgba(248,81,73,0.3)'}`,
+                  color: saveMsg.type === 'success' ? 'var(--status-live)' : 'var(--status-critical)',
+                }}>
+                  {saveMsg.text}
+                </div>
+              )}
+
+              {/* Env vars table */}
+              {!editing ? (
+                /* Read-only view */
+                <div style={{
+                  background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 6,
+                  overflow: 'hidden',
+                }}>
+                  {envVars.length === 0 ? (
+                    <p style={{ padding: 12, color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>
+                      尚無環境變數 / No environment variables set
+                    </p>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                          <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Key</th>
+                          <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {envVars.map((v, i) => (
+                          <tr key={i} style={{ borderBottom: i < envVars.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                            <td style={{ padding: '6px 12px', fontFamily: 'monospace', fontSize: 12, color: 'var(--text-primary)' }}>{v.key}</td>
+                            <td style={{ padding: '6px 12px', fontFamily: 'monospace', fontSize: 12, color: 'var(--text-secondary)' }}>{v.maskedValue}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              ) : (
+                /* Edit mode */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {editEntries.map((entry, i) => {
+                    const isReserved = RESERVED_VARS.has(entry.key.toUpperCase());
+                    return (
+                      <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          value={entry.key}
+                          onChange={(e) => updateEntry(i, 'key', e.target.value)}
+                          placeholder="KEY"
+                          readOnly={!entry.isNew}
+                          style={{
+                            flex: '0 0 220px', padding: '6px 10px', fontSize: 12, fontFamily: 'monospace',
+                            background: entry.isNew ? 'var(--bg-primary)' : 'var(--bg-tertiary, var(--bg-secondary))',
+                            border: `1px solid ${isReserved ? 'var(--status-critical)' : 'var(--border)'}`,
+                            borderRadius: 4, color: 'var(--text-primary)',
+                            opacity: entry.isNew ? 1 : 0.8,
+                          }}
+                        />
+                        <input
+                          type="text"
+                          value={entry.value}
+                          onChange={(e) => updateEntry(i, 'value', e.target.value)}
+                          placeholder={entry.isNew ? 'value' : '(留空 = 不修改 / leave empty = no change)'}
+                          style={{
+                            flex: 1, padding: '6px 10px', fontSize: 12, fontFamily: 'monospace',
+                            background: 'var(--bg-primary)', border: '1px solid var(--border)',
+                            borderRadius: 4, color: 'var(--text-primary)',
+                          }}
+                        />
+                        <button
+                          onClick={() => removeEntry(i)}
+                          title="移除"
+                          style={{
+                            width: 28, height: 28, borderRadius: 4, border: '1px solid var(--border)',
+                            background: 'transparent', color: 'var(--status-critical)',
+                            cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', flexShrink: 0,
+                          }}
+                        >
+                          &times;
+                        </button>
+                        {isReserved && (
+                          <span style={{ fontSize: 10, color: 'var(--status-critical)', flexShrink: 0 }}>
+                            reserved
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {editEntries.length === 0 && (
+                    <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+                      點擊「+ 新增變數」來新增環境變數
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <p style={{ marginTop: 8, fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                修改後會直接更新 Cloud Run 服務（不需重新建置映像檔）。留空的值不會被修改。
+              </p>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

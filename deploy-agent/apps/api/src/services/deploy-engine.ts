@@ -16,6 +16,11 @@ export interface DeployConfig {
   allowUnauthenticated?: boolean;
   port?: number;
   cloudSqlInstance?: string;  // CloudSQL instance connection name for annotation
+  vpcEgress?: {
+    network: string;   // e.g. "default"
+    subnet: string;    // e.g. "default"
+    egress?: 'ALL_TRAFFIC' | 'PRIVATE_RANGES_ONLY';
+  };
 }
 
 export interface DeployResult {
@@ -87,7 +92,14 @@ export async function buildAndPushImage(
       steps: [
         {
           name: 'gcr.io/cloud-builders/docker',
-          args: ['build', '-t', imageUri, '.'],
+          args: [
+            'build',
+            // Pass env vars as build args (for Vite/React build-time injection)
+            ...Object.entries(config.envVars)
+              .filter(([k]) => k.startsWith('VITE_') || k.startsWith('NEXT_PUBLIC_') || k.startsWith('REACT_APP_'))
+              .flatMap(([k, v]) => ['--build-arg', `${k}=${v}`]),
+            '-t', imageUri, '.',
+          ],
         },
       ],
       images: [imageUri],
@@ -120,13 +132,30 @@ export async function buildAndPushImage(
       if (!statusRes.ok) {
         throw new Error(`Cloud Build poll failed (${statusRes.status})`);
       }
-      const status = await statusRes.json() as { status: string; statusDetail?: string };
+      const status = await statusRes.json() as { status: string; statusDetail?: string; logUrl?: string; results?: { buildStepOutputs?: string[] }; steps?: Array<{ status: string; args?: string[] }> };
 
       if (status.status === 'SUCCESS') {
         return { success: true, imageUri, error: null };
       }
       if (status.status === 'FAILURE' || status.status === 'INTERNAL_ERROR' || status.status === 'TIMEOUT' || status.status === 'CANCELLED') {
-        throw new Error(`Cloud Build ${status.status}: ${status.statusDetail ?? 'no details'}`);
+        // Try to fetch build log for detailed error
+        let detailMsg = status.statusDetail ?? 'no details';
+        try {
+          const logUrl = `https://cloudbuild.googleapis.com/v1/projects/${config.gcpProject}/builds/${buildId}`;
+          const logRes = await gcpFetch(logUrl);
+          if (logRes.ok) {
+            const logData = await logRes.json() as { logUrl?: string; failureInfo?: { detail?: string; type?: string }; statusDetail?: string };
+            if (logData.failureInfo?.detail) {
+              detailMsg = logData.failureInfo.detail;
+            } else if (logData.statusDetail) {
+              detailMsg = logData.statusDetail;
+            }
+            if (logData.logUrl) {
+              detailMsg += ` | Logs: ${logData.logUrl}`;
+            }
+          }
+        } catch { /* ignore log fetch errors */ }
+        throw new Error(`Cloud Build ${status.status}: ${detailMsg}`);
       }
       console.log(`[Deploy]   Cloud Build status: ${status.status}`);
     }
@@ -150,24 +179,51 @@ export async function deployToCloudRun(config: DeployConfig, imageUri: string): 
     const existsRes = await gcpFetch(getUrl);
     const serviceExists = existsRes.ok;
 
-    // Build service spec
-    const envVars = Object.entries(config.envVars).map(([name, value]) => ({ name, value }));
+    // Build service spec — filter out Cloud Run reserved env vars
+    const RESERVED_ENV_VARS = new Set(['PORT', 'K_SERVICE', 'K_REVISION', 'K_CONFIGURATION']);
+    const envVars = Object.entries(config.envVars)
+      .filter(([name]) => {
+        if (RESERVED_ENV_VARS.has(name)) {
+          console.log(`[Deploy]   Skipping reserved env var: ${name}`);
+          return false;
+        }
+        return true;
+      })
+      .map(([name, value]) => ({ name, value }));
 
     // Build template annotations (e.g., CloudSQL connection)
     const templateAnnotations: Record<string, string> = {};
     const volumeMounts: Array<{ name: string; mountPath: string }> = [];
-    const volumes: Array<{ name: string; cloudSqlInstance?: { instances: Array<{ instance: string }> } }> = [];
+    const volumes: Array<{ name: string; cloudSqlInstance?: { instances: string[] } }> = [];
 
     if (config.cloudSqlInstance) {
-      // Cloud Run v2: use volume mount for CloudSQL
+      // Cloud Run v2: use volume mount for CloudSQL — instances must be plain string array
+      const instanceStr = String(config.cloudSqlInstance);
       volumes.push({
         name: 'cloudsql',
         cloudSqlInstance: {
-          instances: [{ instance: config.cloudSqlInstance }],
+          instances: [instanceStr],
         },
       });
       volumeMounts.push({ name: 'cloudsql', mountPath: '/cloudsql' });
-      console.log(`[Deploy]   CloudSQL connection: ${config.cloudSqlInstance}`);
+      console.log(`[Deploy]   CloudSQL volume: ${JSON.stringify(volumes[volumes.length - 1])}`);
+      console.log(`[Deploy]   CloudSQL connection: ${instanceStr} (type: ${typeof instanceStr})`);
+    }
+
+    // Direct VPC egress — enables reaching internal VPC resources (Redis VM etc.)
+    let vpcAccess: {
+      networkInterfaces: Array<{ network: string; subnetwork: string }>;
+      egress: string;
+    } | undefined;
+    if (config.vpcEgress) {
+      vpcAccess = {
+        networkInterfaces: [{
+          network: config.vpcEgress.network,
+          subnetwork: config.vpcEgress.subnet,
+        }],
+        egress: config.vpcEgress.egress ?? 'PRIVATE_RANGES_ONLY',
+      };
+      console.log(`[Deploy]   VPC egress: network=${config.vpcEgress.network} subnet=${config.vpcEgress.subnet} egress=${vpcAccess.egress}`);
     }
 
     const serviceSpec = {
@@ -187,6 +243,7 @@ export async function deployToCloudRun(config: DeployConfig, imageUri: string): 
           },
         ],
         volumes: volumes.length > 0 ? volumes : undefined,
+        vpcAccess,
         scaling: {
           minInstanceCount: config.minInstances ?? 0,
           maxInstanceCount: config.maxInstances ?? 10,
@@ -543,6 +600,49 @@ export async function updateServiceEnvVars(
   } catch (err) {
     return { success: false, error: (err as Error).message };
   }
+}
+
+/** Read env vars from a live Cloud Run service (values returned as-is). */
+export async function getServiceEnvVars(
+  gcpProject: string,
+  gcpRegion: string,
+  serviceName: string,
+): Promise<Record<string, string>> {
+  const parent = `projects/${gcpProject}/locations/${gcpRegion}`;
+  const serviceUrl = `https://run.googleapis.com/v2/${parent}/services/${serviceName}`;
+
+  const res = await gcpFetch(serviceUrl);
+  if (!res.ok) return {};
+
+  const service = await res.json() as {
+    template?: {
+      containers?: Array<{ env?: Array<{ name: string; value?: string }> }>;
+    };
+  };
+
+  const env: Record<string, string> = {};
+  for (const entry of service.template?.containers?.[0]?.env ?? []) {
+    if (entry.name && entry.value !== undefined) {
+      env[entry.name] = entry.value;
+    }
+  }
+  return env;
+}
+
+// Returns the image URI currently running on a Cloud Run service, or null
+// if the service doesn't exist.
+export async function getServiceImage(
+  gcpProject: string,
+  gcpRegion: string,
+  serviceName: string,
+): Promise<string | null> {
+  const serviceUrl = `https://run.googleapis.com/v2/projects/${gcpProject}/locations/${gcpRegion}/services/${serviceName}`;
+  const res = await gcpFetch(serviceUrl);
+  if (!res.ok) return null;
+  const service = await res.json() as {
+    template?: { containers?: Array<{ image?: string }> };
+  };
+  return service.template?.containers?.[0]?.image ?? null;
 }
 
 function sleep(ms: number): Promise<void> {

@@ -13,13 +13,16 @@ import {
   transitionProject,
   createScanReport,
   getLatestScanReport,
+  updateScanReport,
+  createReview,
   getDeploymentsByProject,
   deleteProjectFromDb,
   updateProjectConfig,
 } from '../services/orchestrator';
 import { runPipeline } from '../services/pipeline-worker';
-import { deleteService, deleteDomainMapping, deleteContainerImage, updateServiceEnvVars } from '../services/deploy-engine';
+import { deleteService, deleteDomainMapping, deleteContainerImage, updateServiceEnvVars, getServiceEnvVars } from '../services/deploy-engine';
 import { deleteCname } from '../services/dns-manager';
+import { stopProjectService, startProjectService } from '../services/service-lifecycle';
 
 const execFileAsync = promisify(execFile);
 
@@ -81,7 +84,7 @@ const submitSchema = z.object({
   config: z.object({
     deployTarget: z.enum(['cloud_run']).default('cloud_run'),
     customDomain: z.string().optional(),
-    allowUnauthenticated: z.boolean().default(false),
+    allowUnauthenticated: z.boolean().default(true),  // Public by default
     gcpProject: z.string().optional(),
     gcpRegion: z.string().optional(),
   }).optional(),
@@ -199,12 +202,13 @@ export async function projectRoutes(app: FastifyInstance) {
     await writeFile(archivePath, fileBuffer);
 
     // Extract based on file type
+    const lowerName = fileName.toLowerCase();
     try {
-      if (fileName.endsWith('.zip')) {
+      if (lowerName.endsWith('.zip')) {
         await execFileAsync('unzip', ['-o', archivePath, '-d', extractDir], { timeout: 60000 });
-      } else if (fileName.endsWith('.tar.gz') || fileName.endsWith('.tgz')) {
+      } else if (lowerName.endsWith('.tar.gz') || lowerName.endsWith('.tgz')) {
         await execFileAsync('tar', ['-xzf', archivePath, '-C', extractDir], { timeout: 60000 });
-      } else if (fileName.endsWith('.tar')) {
+      } else if (lowerName.endsWith('.tar')) {
         await execFileAsync('tar', ['-xf', archivePath, '-C', extractDir], { timeout: 60000 });
       } else {
         return reply.status(400).send({ error: 'Unsupported file type. Please upload .zip, .tar.gz, or .tar' });
@@ -213,13 +217,170 @@ export async function projectRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: `Failed to extract archive: ${(err as Error).message}` });
     }
 
-    // Check if archive had a single root directory — if so, use that as project dir
-    const { stdout } = await execFileAsync('ls', [extractDir]);
-    const entries = stdout.trim().split('\n').filter(Boolean);
-    const projectDir = entries.length === 1
-      ? join(extractDir, entries[0])
-      : extractDir;
+    // ── Defensive cleanup: remove macOS/OS junk directories ──
+    const { rmSync, existsSync, statSync, readdirSync, readFileSync } = await import('node:fs');
+    const junkDirs = ['__MACOSX', '.DS_Store', '__pycache__', '.Spotlight-V100', '.Trashes'];
+    for (const junk of junkDirs) {
+      const junkPath = join(extractDir, junk);
+      try { rmSync(junkPath, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+    // Also recursively remove .DS_Store files inside subdirectories
+    const removeDsStore = (dir: string) => {
+      try {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          const full = join(dir, entry.name);
+          if (entry.name === '.DS_Store') { try { rmSync(full, { force: true }); } catch {} }
+          else if (entry.isDirectory()) removeDsStore(full);
+        }
+      } catch { /* ignore */ }
+    };
+    removeDsStore(extractDir);
 
+    // ── Determine projectDir: find the real root with source code ──
+    const { stdout } = await execFileAsync('ls', [extractDir]);
+    const entries = stdout.trim().split('\n').filter(e => e && !junkDirs.includes(e));
+    let projectDir: string;
+
+    if (entries.length === 1 && existsSync(join(extractDir, entries[0])) &&
+        statSync(join(extractDir, entries[0])).isDirectory()) {
+      // Single directory inside archive — use it as root
+      projectDir = join(extractDir, entries[0]);
+    } else {
+      // Files are directly in extractDir
+      projectDir = extractDir;
+    }
+
+    // ── Monorepo detection: MUST run before single-service fallback ──
+    // Check for multiple Dockerfiles in subdirectories while projectDir is still the root
+    {
+      const monorepoSubdirs = readdirSync(projectDir, { withFileTypes: true })
+        .filter(d => d.isDirectory() && !d.name.startsWith('.') && d.name !== 'node_modules')
+        .map(d => d.name);
+      const servicesWithDockerfile = monorepoSubdirs.filter(d => existsSync(join(projectDir, d, 'Dockerfile')));
+      const rootHasDockerfile = existsSync(join(projectDir, 'Dockerfile'));
+
+      // If 2+ subdirectories have Dockerfiles and root does NOT have one → monorepo
+      if (servicesWithDockerfile.length >= 2 && !rootHasDockerfile) {
+        // Jump to monorepo handling (defined below)
+        var isMonorepo = true;
+        var monorepoServicesWithDockerfile = servicesWithDockerfile;
+      } else {
+        var isMonorepo = false;
+        var monorepoServicesWithDockerfile: string[] = [];
+      }
+    }
+
+    // ── Validate: must have a Dockerfile or package.json (single-service) ──
+    if (!isMonorepo) {
+      const hasDockerfile = existsSync(join(projectDir, 'Dockerfile'));
+      const hasPackageJson = existsSync(join(projectDir, 'package.json'));
+      if (!hasDockerfile && !hasPackageJson) {
+        // Maybe nested one level deeper? Try to find Dockerfile
+        const subdirs = readdirSync(projectDir, { withFileTypes: true })
+          .filter(d => d.isDirectory())
+          .map(d => d.name);
+        const subWithDockerfile = subdirs.find(d => existsSync(join(projectDir, d, 'Dockerfile')));
+        if (subWithDockerfile) {
+          console.log(`[Upload] Dockerfile found in subdirectory: ${subWithDockerfile}, adjusting projectDir`);
+          projectDir = join(projectDir, subWithDockerfile);
+        } else {
+          console.warn(`[Upload] No Dockerfile or package.json found in extracted archive at: ${projectDir}`);
+          console.warn(`[Upload] Directory contents: ${readdirSync(projectDir).join(', ')}`);
+          // Don't block — the build step will give a clearer error
+        }
+      }
+    }
+    console.log(`[Upload] Final projectDir: ${projectDir}, hasDockerfile: ${existsSync(join(projectDir, 'Dockerfile'))}, entries: [${entries.join(', ')}], isMonorepo: ${isMonorepo}`);
+
+    if (isMonorepo) {
+      const servicesWithDockerfile = monorepoServicesWithDockerfile;
+      console.log(`[Upload] Monorepo detected! Services: ${servicesWithDockerfile.join(', ')}`);
+      const groupId = `group-${Date.now()}`;
+      const userEnvVars = parseEnvVarsText(envVarsRaw);
+      const createdProjects: Array<{ project: unknown; scanReport: unknown }> = [];
+
+      // Classify services: 'backend' deploys first, 'frontend' deploys after
+      const classifyService = (dirName: string, serviceDir: string): 'backend' | 'frontend' => {
+        const lower = dirName.toLowerCase();
+        if (lower.includes('backend') || lower.includes('api') || lower.includes('server')) return 'backend';
+        if (lower.includes('frontend') || lower.includes('web') || lower.includes('client') || lower.includes('app')) return 'frontend';
+        // Heuristic: check for known backend files
+        if (existsSync(join(serviceDir, 'requirements.txt')) || existsSync(join(serviceDir, 'go.mod'))) return 'backend';
+        // Check for known frontend indicators
+        if (existsSync(join(serviceDir, 'vite.config.ts')) || existsSync(join(serviceDir, 'next.config.js')) ||
+            existsSync(join(serviceDir, 'next.config.ts')) || existsSync(join(serviceDir, 'next.config.mjs'))) return 'frontend';
+        // Check package.json for framework hints
+        try {
+          const pkg = JSON.parse(readFileSync(join(serviceDir, 'package.json'), 'utf8'));
+          const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+          if (deps.next || deps.nuxt || deps.vite || deps['@sveltejs/kit'] || deps.react) return 'frontend';
+          if (deps.express || deps.fastify || deps.hono || deps.koa) return 'backend';
+        } catch { /* ignore */ }
+        return 'backend'; // default to backend
+      };
+
+      const siblings = servicesWithDockerfile.map(d => ({
+        dirName: d,
+        role: classifyService(d, join(projectDir, d)),
+        projectName: `${name.trim()}-${d}`,
+      }));
+
+      for (const svc of siblings) {
+        const serviceDir = join(projectDir, svc.dirName);
+        const svcSlug = svc.projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+
+        let gcsSourceUri = '';
+        try {
+          gcsSourceUri = await uploadSourceToGcs(svcSlug, serviceDir);
+        } catch (err) {
+          console.error(`[Upload] GCS upload failed for ${svc.projectName}:`, (err as Error).message);
+        }
+
+        const project = await createProject({
+          name: svc.projectName,
+          sourceType: 'upload',
+          sourceUrl: serviceDir,
+          config: {
+            deployTarget: 'cloud_run',
+            // Subdomain convention: frontend = {domain}, backend = api.{domain}
+            customDomain: customDomain.trim()
+              ? (svc.role === 'frontend' ? customDomain.trim() : `api.${customDomain.trim()}`)
+              : undefined,
+            allowUnauthenticated,
+            gcsSourceUri,
+            envVars: Object.keys(userEnvVars).length > 0 ? userEnvVars : undefined,
+            // Monorepo metadata
+            projectGroup: groupId,
+            groupName: name.trim(),
+            serviceRole: svc.role, // 'backend' | 'frontend'
+            serviceDirName: svc.dirName,
+            siblings: siblings.map(s => ({ name: s.projectName, role: s.role, dirName: s.dirName })),
+          },
+        });
+
+        await transitionProject(project.id, 'scanning', 'system', { trigger: 'auto' });
+        const scanReport = await createScanReport(project.id);
+
+        runPipeline(project.id, serviceDir).catch((err) => {
+          console.error(`[Pipeline] Async dispatch failed for ${project.id}:`, (err as Error).message);
+        });
+
+        createdProjects.push({
+          project: { ...project, status: 'scanning' },
+          scanReport,
+        });
+      }
+
+      console.log(`[Upload] Monorepo group ${groupId}: created ${createdProjects.length} projects`);
+      return reply.status(201).send({
+        monorepo: true,
+        groupId,
+        services: createdProjects,
+        uploadedFile: fileName,
+      });
+    }
+
+    // ── Single-service project (original flow) ──
     // Upload source to GCS for durable storage (Cloud Run /tmp is ephemeral)
     let gcsSourceUri = '';
     try {
@@ -264,6 +425,161 @@ export async function projectRoutes(app: FastifyInstance) {
     return { report };
   });
 
+  // Download detailed scan report as Markdown (for senior engineers to review unfixed issues)
+  app.get<{ Params: { id: string } }>('/api/projects/:id/scan/report', async (request, reply) => {
+    const project = await getProject(request.params.id);
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    const report = await getLatestScanReport(project.id);
+    if (!report) return reply.status(404).send({ error: 'No scan report found' });
+
+    const now = new Date().toISOString().slice(0, 10);
+    const filename = `${project.slug}-security-report-${now}.md`;
+
+    // ── Group findings by severity ──
+    type SeverityKey = 'critical' | 'high' | 'medium' | 'low' | 'info';
+    const severityOrder: SeverityKey[] = ['critical', 'high', 'medium', 'low', 'info'];
+    const severityEmoji: Record<SeverityKey, string> = {
+      critical: '\u{1F534}', high: '\u{1F7E0}', medium: '\u{1F7E1}', low: '\u{1F535}', info: '\u26AA',
+    };
+    const grouped: Record<SeverityKey, typeof report.findings> = {
+      critical: [], high: [], medium: [], low: [], info: [],
+    };
+    for (const f of report.findings) {
+      const sev = (f.severity ?? 'info') as SeverityKey;
+      (grouped[sev] ?? grouped.info).push(f);
+    }
+
+    // ── Build auto-fix lookup ──
+    const fixedIds = new Set<string>();
+    const unfixedFindings: typeof report.findings = [];
+    for (const fix of report.autoFixes) {
+      if (fix.applied && fix.findingId) fixedIds.add(fix.findingId);
+    }
+    for (const f of report.findings) {
+      if (!fixedIds.has(f.id)) unfixedFindings.push(f);
+    }
+
+    // ── Markdown report ──
+    const lines: string[] = [];
+    lines.push(`# Security Scan Report — ${project.name}`);
+    lines.push('');
+    lines.push(`| Item | Value |`);
+    lines.push(`|------|-------|`);
+    lines.push(`| Project | ${project.name} (\`${project.slug}\`) |`);
+    lines.push(`| Language | ${project.detectedLanguage ?? 'unknown'} |`);
+    lines.push(`| Framework | ${project.detectedFramework ?? 'none'} |`);
+    lines.push(`| Scan Date | ${report.createdAt.toISOString().slice(0, 19).replace('T', ' ')} UTC |`);
+    lines.push(`| Report Version | v${report.version} |`);
+    lines.push('');
+
+    // Summary counts
+    const total = report.findings.length;
+    const fixed = fixedIds.size;
+    const remaining = unfixedFindings.length;
+    lines.push(`## Summary`);
+    lines.push('');
+    lines.push(`| Severity | Count |`);
+    lines.push(`|----------|-------|`);
+    for (const sev of severityOrder) {
+      if (grouped[sev].length > 0) {
+        lines.push(`| ${severityEmoji[sev]} **${sev.toUpperCase()}** | ${grouped[sev].length} |`);
+      }
+    }
+    lines.push(`| **Total** | **${total}** |`);
+    lines.push(`| Auto-fixed | ${fixed} |`);
+    lines.push(`| Requires manual review | **${remaining}** |`);
+    lines.push('');
+
+    // Auto-fixes applied
+    if (report.autoFixes.length > 0) {
+      lines.push(`## Auto-Fixes Applied`);
+      lines.push('');
+      const appliedFixes = report.autoFixes.filter(f => f.applied);
+      if (appliedFixes.length === 0) {
+        lines.push('No auto-fixes were successfully applied.');
+      } else {
+        for (const fix of appliedFixes) {
+          lines.push(`### \u2705 ${fix.filePath ?? 'unknown'}`);
+          lines.push('');
+          lines.push(fix.explanation);
+          if (fix.diff) {
+            lines.push('');
+            lines.push('```diff');
+            lines.push(fix.diff);
+            lines.push('```');
+          }
+          lines.push('');
+        }
+      }
+      lines.push('');
+    }
+
+    // Findings requiring manual review (grouped by severity)
+    lines.push(`## Findings Requiring Manual Review`);
+    lines.push('');
+    if (remaining === 0) {
+      lines.push('All findings have been auto-fixed. No manual action required.');
+    } else {
+      let idx = 1;
+      for (const sev of severityOrder) {
+        const sevFindings = grouped[sev].filter(f => !fixedIds.has(f.id));
+        if (sevFindings.length === 0) continue;
+
+        lines.push(`### ${severityEmoji[sev]} ${sev.toUpperCase()} (${sevFindings.length})`);
+        lines.push('');
+
+        for (const f of sevFindings) {
+          lines.push(`#### ${idx}. ${f.title}`);
+          lines.push('');
+          lines.push(`| Field | Detail |`);
+          lines.push(`|-------|--------|`);
+          lines.push(`| Severity | **${f.severity}** |`);
+          lines.push(`| Category | ${f.category} |`);
+          lines.push(`| Tool | ${f.tool} |`);
+          lines.push(`| File | \`${f.filePath}\` |`);
+          lines.push(`| Lines | L${f.lineStart}${f.lineEnd !== f.lineStart ? `–L${f.lineEnd}` : ''} |`);
+          lines.push('');
+          lines.push(`> ${f.description}`);
+          lines.push('');
+          idx++;
+        }
+      }
+    }
+
+    // Threat summary (LLM-generated)
+    if (report.threatSummary) {
+      lines.push(`## Threat Analysis`);
+      lines.push('');
+      lines.push(report.threatSummary);
+      lines.push('');
+    }
+
+    // Cost estimate
+    if (report.costEstimate) {
+      lines.push(`## Estimated Monthly Cost (GCP Cloud Run)`);
+      lines.push('');
+      lines.push(`| Resource | Cost (USD) |`);
+      lines.push(`|----------|-----------|`);
+      lines.push(`| Compute | $${report.costEstimate.breakdown.compute.toFixed(2)} |`);
+      lines.push(`| Storage | $${report.costEstimate.breakdown.storage.toFixed(2)} |`);
+      lines.push(`| Networking | $${report.costEstimate.breakdown.networking.toFixed(2)} |`);
+      lines.push(`| SSL | $${report.costEstimate.breakdown.ssl.toFixed(2)} |`);
+      lines.push(`| **Total** | **$${report.costEstimate.monthlyTotal.toFixed(2)}** |`);
+      lines.push('');
+    }
+
+    lines.push('---');
+    lines.push(`*Generated by Wave Deploy Agent on ${now}*`);
+
+    const markdown = lines.join('\n');
+
+    return reply
+      .header('Content-Type', 'text/markdown; charset=utf-8')
+      .header('Content-Disposition', `attachment; filename="${filename}"`)
+      .send(markdown);
+  });
+
   // Get full project detail: project + scan report + deployments + timeline
   app.get<{ Params: { id: string } }>('/api/projects/:id/detail', async (request, reply) => {
     const project = await getProject(request.params.id);
@@ -301,7 +617,7 @@ export async function projectRoutes(app: FastifyInstance) {
     const project = await getProject(request.params.id);
     if (!project) return reply.status(404).send({ error: 'Project not found' });
 
-    if (project.status !== 'needs_revision' && project.status !== 'failed') {
+    if (project.status !== 'needs_revision' && project.status !== 'failed' && project.status !== 'live') {
       return reply.status(400).send({ error: `Cannot retry from status: ${project.status}` });
     }
 
@@ -321,6 +637,45 @@ export async function projectRoutes(app: FastifyInstance) {
     }
 
     return { project: { ...project, status: 'scanning' }, scanReport };
+  });
+
+  // Force-fail a stuck project (e.g. scanning timeout)
+  app.post<{ Params: { id: string } }>('/api/projects/:id/force-fail', async (request, reply) => {
+    const project = await getProject(request.params.id);
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    if (project.status !== 'scanning' && project.status !== 'deploying') {
+      return reply.status(400).send({ error: `Project is not stuck (status: ${project.status})` });
+    }
+
+    await transitionProject(project.id, 'failed', 'admin', {
+      reason: 'Force-failed by admin (stuck pipeline)',
+    });
+
+    return { project: { ...project, status: 'failed' } };
+  });
+
+  // Skip scan and go directly to review_pending (for stuck pipelines)
+  app.post<{ Params: { id: string } }>('/api/projects/:id/skip-scan', async (request, reply) => {
+    const project = await getProject(request.params.id);
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    if (project.status !== 'scanning' && project.status !== 'failed') {
+      return reply.status(400).send({ error: `Cannot skip scan from status: ${project.status}` });
+    }
+
+    // Create scan report if missing, then transition to review_pending
+    let scanReport = await getLatestScanReport(project.id);
+    if (!scanReport) {
+      scanReport = await createScanReport(project.id);
+    }
+    await updateScanReport(scanReport.id, { status: 'completed' });
+    await transitionProject(project.id, 'review_pending', 'admin', {
+      reason: 'Scan skipped by admin',
+    });
+    await createReview(scanReport.id);
+
+    return { project: { ...project, status: 'review_pending' }, scanReport };
   });
 
   // Delete project and tear down all GCP resources
@@ -398,7 +753,28 @@ export async function projectRoutes(app: FastifyInstance) {
     const project = await getProject(request.params.id);
     if (!project) return reply.status(404).send({ error: 'Project not found' });
 
-    const envVars: Record<string, string> = (project.config?.envVars as Record<string, string>) ?? {};
+    // Try to read live env vars from Cloud Run service first
+    const deployments = await getDeploymentsByProject(project.id);
+    const activeDeployment = deployments.find((d) => d.cloudRunService);
+
+    let envVars: Record<string, string> = {};
+
+    if (activeDeployment?.cloudRunService) {
+      const gcpProject = (project.config?.gcpProject as string) || process.env.GCP_PROJECT || '';
+      const gcpRegion = (project.config?.gcpRegion as string) || process.env.GCP_REGION || 'asia-east1';
+      if (gcpProject) {
+        try {
+          envVars = await getServiceEnvVars(gcpProject, gcpRegion, activeDeployment.cloudRunService);
+        } catch {
+          // Fallback to DB
+          envVars = (project.config?.envVars as Record<string, string>) ?? {};
+        }
+      }
+    } else {
+      // No deployment — use DB config
+      envVars = (project.config?.envVars as Record<string, string>) ?? {};
+    }
+
     const maskedVars = Object.entries(envVars).map(([key, value]) => ({
       key,
       maskedValue: value.length > 3 ? value.slice(0, 3) + '***' : '***',
@@ -457,5 +833,51 @@ export async function projectRoutes(app: FastifyInstance) {
       projectId: project.id,
       updatedKeys: Object.keys(mergedEnvVars),
     };
+  });
+
+  // Stop a single project's Cloud Run service (delete service, keep image)
+  app.post<{ Params: { id: string } }>('/api/projects/:id/stop', async (request, reply) => {
+    const result = await stopProjectService(request.params.id, 'api-user');
+    if (!result.success) return reply.status(400).send({ error: result.message });
+    return result;
+  });
+
+  // Start a stopped project (redeploy from cached Artifact Registry image)
+  app.post<{ Params: { id: string } }>('/api/projects/:id/start', async (request, reply) => {
+    const result = await startProjectService(request.params.id, 'api-user');
+    if (!result.success) return reply.status(400).send({ error: result.message });
+    return result;
+  });
+
+  // Download the project's source tarball (proxies GCS through service account)
+  app.get<{ Params: { id: string } }>('/api/projects/:id/source-download', async (request, reply) => {
+    const project = await getProject(request.params.id);
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    const gcsUri = project.config?.gcsSourceUri as string | undefined;
+    if (!gcsUri) return reply.status(404).send({ error: 'No source archive on record for this project' });
+
+    // gs://bucket/path/to/object.tar.gz
+    const match = gcsUri.match(/^gs:\/\/([^/]+)\/(.+)$/);
+    if (!match) return reply.status(500).send({ error: `Malformed GCS URI: ${gcsUri}` });
+    const [, bucket, object] = match;
+
+    // GCS JSON API: ?alt=media streams the object bytes.
+    const url = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(object)}?alt=media`;
+    const gcsResp = await gcpFetch(url);
+    if (!gcsResp.ok) {
+      const errText = await gcsResp.text();
+      return reply.status(gcsResp.status).send({ error: `GCS fetch failed: ${errText}` });
+    }
+
+    const filename = object.split('/').pop() ?? `${project.slug}-source.tar.gz`;
+    reply
+      .header('Content-Type', gcsResp.headers.get('content-type') ?? 'application/gzip')
+      .header('Content-Disposition', `attachment; filename="${filename}"`);
+    const len = gcsResp.headers.get('content-length');
+    if (len) reply.header('Content-Length', len);
+
+    // Stream the body to the client
+    return reply.send(gcsResp.body);
   });
 }

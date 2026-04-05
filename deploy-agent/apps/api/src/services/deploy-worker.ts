@@ -3,9 +3,13 @@
 
 import {
   getProject,
+  listProjects,
   transitionProject,
   createDeployment,
   updateDeployment,
+  getDeploymentsByProject,
+  getLatestScanReport,
+  updateProjectConfig,
 } from './orchestrator';
 import { buildAndPushImage, deployToCloudRun } from './deploy-engine';
 import { setupCustomDomainWithDns, type DnsConfig } from './dns-manager';
@@ -13,6 +17,8 @@ import { monitorSsl } from './ssl-monitor';
 import { runCanaryChecks } from './canary-monitor';
 import { detectProject } from './project-detector';
 import { detectEnvVars, mergeEnvVars } from './env-detector';
+import { provisionProjectDatabase } from './db-provisioner';
+import { provisionProjectRedis } from './redis-provisioner';
 
 export async function runDeployPipeline(
   projectId: string,
@@ -44,8 +50,8 @@ export async function runDeployPipeline(
     currentStep = 'Step 2: Detect project settings';
     console.log(`[Deploy] ${currentStep}...`);
     let port = 3000;
-    let detectedFramework: string | null = null;
-    let detectedLanguage = 'unknown';
+    let detectedFramework: string | null = project.detectedFramework ?? null;
+    let detectedLanguage = project.detectedLanguage ?? 'unknown';
     try {
       const detection = detectProject(projectDir);
       port = detection.port;
@@ -53,7 +59,79 @@ export async function runDeployPipeline(
       detectedLanguage = detection.language;
       console.log(`[Deploy]   Detected: ${detectedLanguage}/${detectedFramework ?? 'none'}, port: ${port}`);
     } catch {
-      console.log(`[Deploy]   Using default port: ${port}`);
+      // projectDir may not exist (ephemeral /tmp after revision change)
+      // Fall back to DB-stored detection + port saved during pipeline scan
+      const savedPort = project.config?.detectedPort as number | undefined;
+      if (savedPort) {
+        port = savedPort;
+      } else {
+        const frameworkPortMap: Record<string, number> = {
+          nextjs: 3000, nuxt: 3000, sveltekit: 5173,
+          express: 3000, fastify: 3000, hono: 3000,
+          django: 8000, fastapi: 8000, flask: 5000,
+          static: 8080,
+        };
+        if (detectedFramework && frameworkPortMap[detectedFramework]) {
+          port = frameworkPortMap[detectedFramework];
+        } else if (detectedLanguage === 'python') {
+          port = 8000;
+        } else if (detectedLanguage === 'go') {
+          port = 8080;
+        } else {
+          // Last resort: extract Dockerfile from GCS source to check EXPOSE
+          const gcsUri = project.config?.gcsSourceUri as string | undefined;
+          if (gcsUri && gcsUri.startsWith('gs://')) {
+            try {
+              const withoutPrefix = gcsUri.slice(5);
+              const slashIdx = withoutPrefix.indexOf('/');
+              const bucket = withoutPrefix.slice(0, slashIdx);
+              const object = withoutPrefix.slice(slashIdx + 1);
+              // Download tgz via GCS REST API
+              const downloadUrl = `https://storage.googleapis.com/storage/v1/b/${bucket}/o/${encodeURIComponent(object)}?alt=media`;
+              // Get access token from GCP metadata server (available on Cloud Run)
+              const tokenResp = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token', { headers: { 'Metadata-Flavor': 'Google' } });
+              const tokenData = await tokenResp.json() as { access_token: string };
+              const resp = await fetch(downloadUrl, { headers: { Authorization: `Bearer ${tokenData.access_token}` } });
+              if (resp.ok) {
+                const { writeFileSync: wfs, readFileSync: rfs, existsSync: efs, mkdirSync } = await import('node:fs');
+                const { execSync } = await import('node:child_process');
+                const tmpExtract = `/tmp/deploy-port-check-${project.id}`;
+                mkdirSync(tmpExtract, { recursive: true });
+                const buf = Buffer.from(await resp.arrayBuffer());
+                wfs(`${tmpExtract}/src.tgz`, buf);
+                execSync(`tar xzf ${tmpExtract}/src.tgz -C ${tmpExtract} 2>/dev/null || true`, { timeout: 10000 });
+                const dfPaths = [`${tmpExtract}/Dockerfile`, `${tmpExtract}/source/Dockerfile`];
+                for (const dfPath of dfPaths) {
+                  if (efs(dfPath)) {
+                    const dockerContent = rfs(dfPath, 'utf8');
+                    // Priority: ENV PORT=X > EXPOSE Y > nginx default
+                    // ENV PORT is what the app actually listens on at runtime
+                    const envPortMatch = dockerContent.match(/^ENV\s+PORT[=\s]+(\d+)/m);
+                    if (envPortMatch) {
+                      port = parseInt(envPortMatch[1], 10);
+                      console.log(`[Deploy]   Port from GCS Dockerfile ENV PORT: ${port}`);
+                    } else {
+                      const exposeMatch = dockerContent.match(/^EXPOSE\s+(\d+)/m);
+                      if (exposeMatch) {
+                        port = parseInt(exposeMatch[1], 10);
+                        console.log(`[Deploy]   Port from GCS Dockerfile EXPOSE: ${port}`);
+                      } else if (dockerContent.match(/FROM\s+nginx/i)) {
+                        port = 80;
+                        console.log(`[Deploy]   Port from GCS Dockerfile (nginx): ${port}`);
+                      }
+                    }
+                    break;
+                  }
+                }
+                execSync(`rm -rf ${tmpExtract}`, { timeout: 5000 });
+              }
+            } catch (gcsErr) {
+              console.warn(`[Deploy]   Could not extract port from GCS source: ${(gcsErr as Error).message}`);
+            }
+          }
+        }
+      }
+      console.log(`[Deploy]   Using DB-stored detection: ${detectedLanguage}/${detectedFramework ?? 'none'}, port: ${port}`);
     }
 
     // Compute custom domain FQDN for env detection
@@ -94,11 +172,128 @@ export async function runDeployPipeline(
     const finalEnvVars = mergeEnvVars(envDetection.detected, userEnvVars);
     console.log(`[Deploy]   ENV total: ${Object.keys(finalEnvVars).length} vars (${Object.keys(envDetection.detected).length} auto + ${Object.keys(userEnvVars).length} user)`);
 
+    // ── Monorepo: inject sibling backend URLs for frontend services ──
+    const projectGroup = project.config?.projectGroup as string | undefined;
+    const serviceRole = project.config?.serviceRole as string | undefined;
+    if (projectGroup && serviceRole === 'frontend') {
+      currentStep = 'Step 2d: Resolve monorepo sibling URLs';
+      console.log(`[Deploy] ${currentStep}...`);
+      try {
+        const allProjects = await listProjects();
+        const siblings = allProjects.filter(p =>
+          (p.config?.projectGroup as string) === projectGroup && p.id !== project.id
+        );
+        for (const sibling of siblings) {
+          const siblingRole = sibling.config?.serviceRole as string;
+          if (siblingRole === 'backend') {
+            // Prefer custom domain over Cloud Run URL for sibling backend
+            const siblingCustomDomain = sibling.config?.customDomain as string | undefined;
+            const siblingFqdn = siblingCustomDomain && cfZoneName
+              ? `https://${siblingCustomDomain}.${cfZoneName}`
+              : undefined;
+            const siblingDeploys = await getDeploymentsByProject(sibling.id);
+            const liveDeploy = siblingDeploys.find(d => d.cloudRunUrl);
+            const fallbackUrl = liveDeploy?.cloudRunUrl ?? undefined;
+            if (siblingFqdn || fallbackUrl) {
+              const backendUrl = siblingFqdn || fallbackUrl!;
+              console.log(`[Deploy]   Found sibling backend URL: ${backendUrl} (from ${sibling.name}${siblingFqdn ? ', custom domain' : ''})`);
+              // Inject into common API URL env vars
+              const apiUrlKeys = ['VITE_API_URL', 'NEXT_PUBLIC_API_URL', 'REACT_APP_API_URL',
+                                  'NUXT_PUBLIC_API_URL', 'API_URL', 'BACKEND_URL', 'API_BASE_URL'];
+              for (const key of apiUrlKeys) {
+                // Inject if: var is referenced in source, OR source wasn't available (always inject for safety)
+                const { existsSync: efs } = await import('node:fs');
+                const sourceUnavailable = !projectDir || !efs(projectDir);
+                if (!userEnvVars[key] && (finalEnvVars[key] !== undefined || envDetection.missing.includes(key) || sourceUnavailable)) {
+                  finalEnvVars[key] = backendUrl;
+                  console.log(`[Deploy]   Injected ${key} = ${backendUrl}`);
+                }
+              }
+            } else {
+              console.warn(`[Deploy]   Sibling backend "${sibling.name}" has no deployment URL yet`);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[Deploy]   Sibling URL resolution failed: ${(err as Error).message}`);
+      }
+    }
+
     // Determine if CloudSQL connection is needed
-    const needsCloudSql = !!(finalEnvVars['DATABASE_URL'] || finalEnvVars['KOL_DATABASE_URL']);
+    const dbVarKeys = Object.keys(finalEnvVars).filter(k =>
+      k === 'DATABASE_URL' || k.endsWith('_DATABASE_URL') || k === 'DB_URL'
+    );
+    const needsCloudSql = dbVarKeys.length > 0;
     const cloudSqlInstance = needsCloudSql
       ? `${gcpProject}:${gcpRegion}:deploy-agent-db`
       : undefined;
+
+    // Provision per-project database if CloudSQL is needed
+    if (needsCloudSql && gcpProject && gcpRegion) {
+      currentStep = 'Step 2c: Provision project database';
+      console.log(`[Deploy] ${currentStep}...`);
+      try {
+        const dbResult = await provisionProjectDatabase(project.slug, gcpProject, gcpRegion);
+        console.log(`[Deploy]   DB: ${dbResult.dbName} (user: ${dbResult.dbUser}, created: ${dbResult.created})`);
+
+        // Replace auto-generated DATABASE_URL with the project-specific one
+        // Only replace if the value was auto-generated (contains deploy-agent-db and deploy_agent user)
+        for (const key of dbVarKeys) {
+          const val = finalEnvVars[key] ?? '';
+          const isAutoGenerated = val.includes('deploy_agent:') && val.includes('deploy-agent-db');
+          const isUserProvided = !!userEnvVars[key];
+          if (isAutoGenerated && !isUserProvided) {
+            finalEnvVars[key] = dbResult.connectionString;
+            console.log(`[Deploy]   Replaced ${key} with project-specific DB credentials`);
+          }
+        }
+      } catch (err) {
+        console.error(`[Deploy]   DB provisioning failed: ${(err as Error).message}`);
+        console.warn(`[Deploy]   Continuing with existing DATABASE_URL (may fail at runtime)`);
+      }
+    }
+
+    // Track whether we auto-provisioned VPC-internal resources (for VPC egress)
+    let needsVpcEgress = false;
+
+    // ── Step 2d: Provision auto-provisioned resources from ResourcePlan ──
+    // Looks at the LLM-generated resource plan and spins up Redis (or other
+    // shared services) the app needs, injecting the connection details into
+    // finalEnvVars so the app can reach them at runtime.
+    try {
+      const scanReport = await getLatestScanReport(projectId);
+      const resourcePlan = scanReport?.resourcePlan;
+      if (resourcePlan && resourcePlan.requirements.length > 0) {
+        currentStep = 'Step 2d: Provision resource plan';
+        console.log(`[Deploy] ${currentStep}...`);
+        for (const req of resourcePlan.requirements) {
+          if (req.strategy !== 'auto_provision') {
+            console.log(`[Deploy]   ${req.type} (${req.useCase}): strategy=${req.strategy} — skipping auto-provision`);
+            continue;
+          }
+          if (req.type === 'redis') {
+            try {
+              const redisResult = await provisionProjectRedis(project.id, project.slug);
+              // Only inject if not user-provided
+              if (!userEnvVars['REDIS_URL']) {
+                finalEnvVars['REDIS_URL'] = redisResult.redisUrl;
+                needsVpcEgress = true; // shared Redis lives on internal VPC
+                console.log(`[Deploy]   Redis provisioned: ${redisResult.providerInfo} (${redisResult.created ? 'new' : 'reused'})`);
+                console.log(`[Deploy]   Injected REDIS_URL (db${redisResult.dbIndex})`);
+              } else {
+                console.log(`[Deploy]   Redis: user supplied REDIS_URL, keeping user value`);
+              }
+            } catch (err) {
+              console.warn(`[Deploy]   Redis provision failed: ${(err as Error).message}`);
+            }
+          } else {
+            console.log(`[Deploy]   ${req.type}: auto-provision not yet implemented, skipping`);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[Deploy]   Resource provisioning step failed: ${(err as Error).message}`);
+    }
 
     // ─── Step 3: Build and push Docker image ───
     currentStep = 'Step 3: Build Docker image (Cloud Build)';
@@ -135,6 +330,11 @@ export async function runDeployPipeline(
       allowUnauthenticated: project.config?.allowUnauthenticated ?? false,
       port,
       cloudSqlInstance,
+      vpcEgress: needsVpcEgress ? {
+        network: process.env.VPC_EGRESS_NETWORK ?? 'default',
+        subnet: process.env.VPC_EGRESS_SUBNET ?? 'default',
+        egress: 'PRIVATE_RANGES_ONLY',
+      } : undefined,
     }, buildResult.imageUri);
 
     if (!deployResult.success) {
@@ -150,6 +350,14 @@ export async function runDeployPipeline(
       healthStatus: 'unknown',
       deployedAt: new Date(),
     });
+
+    // Cache last-deployed image so /start can restart the service without rebuilding
+    try {
+      const updatedConfig = { ...(project.config ?? {}), lastDeployedImage: buildResult.imageUri };
+      await updateProjectConfig(project.id, updatedConfig);
+    } catch (err) {
+      console.warn(`[Deploy]   Failed to cache lastDeployedImage: ${(err as Error).message}`);
+    }
 
     // Post-deploy: update URL-based env vars now that Cloud Run URL is known
     // If no custom domain, URL-based vars (NEXTAUTH_URL, APP_URL etc.) should use Cloud Run URL

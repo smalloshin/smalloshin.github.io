@@ -13,8 +13,9 @@ const VALID_TRANSITIONS: Record<ProjectStatus, ProjectStatus[]> = {
   ssl_provisioning: ['canary_check', 'failed'],
   canary_check: ['live', 'rolling_back'],
   rolling_back: ['deployed', 'failed'],
-  live: ['submitted'], // resubmit for new version
-  failed: ['submitted'], // retry
+  live: ['submitted', 'stopped'], // resubmit for new version, or manually stop
+  stopped: ['live', 'submitted'], // restart (deploy last image) or full rescan
+  failed: ['submitted', 'review_pending', 'stopped'], // retry, skip-scan, or give up
 };
 
 export function canTransition(from: ProjectStatus, to: ProjectStatus): boolean {
@@ -26,7 +27,7 @@ export function getValidTransitions(from: ProjectStatus): ProjectStatus[] {
 }
 
 export function isTerminalState(status: ProjectStatus): boolean {
-  return status === 'live' || status === 'failed';
+  return status === 'live' || status === 'failed' || status === 'stopped';
 }
 
 export function isActionableState(status: ProjectStatus): boolean {

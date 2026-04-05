@@ -7,6 +7,8 @@ import { reviewRoutes } from './routes/reviews';
 import { deployRoutes } from './routes/deploys';
 import { mcpRoutes } from './routes/mcp';
 import { settingsRoutes } from './routes/settings';
+import { projectGroupRoutes } from './routes/project-groups';
+import { infraRoutes } from './routes/infra';
 
 const app = Fastify({
   logger: {
@@ -17,9 +19,10 @@ const app = Fastify({
   },
 });
 
-// CORS
+// CORS — support comma-separated origins (e.g. "https://a.com,https://b.com")
+const corsOrigin = process.env.CORS_ORIGIN ?? '*';
 await app.register(cors, {
-  origin: process.env.CORS_ORIGIN ?? '*',
+  origin: corsOrigin === '*' ? true : corsOrigin.split(',').map(s => s.trim()),
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
 });
 
@@ -39,6 +42,8 @@ await app.register(reviewRoutes);
 await app.register(deployRoutes);
 await app.register(mcpRoutes);
 await app.register(settingsRoutes);
+await app.register(projectGroupRoutes);
+await app.register(infraRoutes);
 
 // Global error handler
 app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {

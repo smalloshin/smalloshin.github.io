@@ -172,8 +172,8 @@ export function detectEnvVars(ctx: DetectionContext): EnvDetectionResult {
   // 7. Common patterns (any framework)
   applyCommonRules(ctx, detected, missing, notes, referenced, warnings);
 
-  // 8. PORT — always set to match Cloud Run container port
-  detected['PORT'] = String(ctx.port);
+  // 8. PORT — Cloud Run sets PORT automatically, do NOT include it in env vars
+  // (Cloud Run rejects requests that set reserved env names like PORT)
 
   // 8. NODE_ENV
   if (referenced.has('NODE_ENV') || ctx.language === 'typescript' || ctx.language === 'javascript') {
@@ -319,14 +319,34 @@ function scanHardcodedFallbacks(projectDir: string, language: string): FallbackI
 // ─── Actual .env file reader (smart filtering) ───
 
 function readDotEnvFiles(projectDir: string): Record<string, string> {
-  // Priority: .env.production > .env.local > .env
-  const envFiles = ['.env.production', '.env.production.local', '.env.local', '.env'];
+  // Priority 1: well-known .env files (production > local > default)
+  const knownEnvFiles = ['.env.production', '.env.production.local', '.env.local', '.env'];
+
+  // Priority 2: discover any other *.env or .env.* files in root directory
+  let discoveredEnvFiles: string[] = [];
+  try {
+    const entries = fs.readdirSync(projectDir);
+    discoveredEnvFiles = entries.filter((f: string) => {
+      const lower = f.toLowerCase();
+      // Match: *.env, .env.*, but exclude .env.example/.env.sample/.env.template (handled separately)
+      const isEnvFile = lower.endsWith('.env') || (lower.startsWith('.env') && !lower.startsWith('.env.example') && !lower.startsWith('.env.sample') && !lower.startsWith('.env.template'));
+      const isKnown = knownEnvFiles.includes(f);
+      const isJunk = lower === 'next-env.d.ts' || lower.endsWith('.d.ts'); // TypeScript declaration files
+      return isEnvFile && !isKnown && !isJunk;
+    });
+    if (discoveredEnvFiles.length > 0) {
+      console.log(`[EnvDetector] Discovered additional env files: ${discoveredEnvFiles.join(', ')}`);
+    }
+  } catch { /* can't read directory */ }
+
+  const allEnvFiles = [...knownEnvFiles, ...discoveredEnvFiles];
   const vars: Record<string, string> = {};
 
-  for (const f of envFiles) {
+  for (const f of allEnvFiles) {
     const content = safeRead(path.join(projectDir, f));
     if (!content) continue;
 
+    console.log(`[EnvDetector] Reading env file: ${f}`);
     for (const line of content.split('\n')) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;

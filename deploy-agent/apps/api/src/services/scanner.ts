@@ -18,9 +18,11 @@ export async function runSemgrep(projectDir: string): Promise<ScanResult> {
       'scan',
       '--json',
       '--config', 'auto',
-      '--timeout', '300',
+      '--timeout', '120',
+      '--max-memory', '512',
+      '--jobs', '1',
       projectDir,
-    ], { timeout: 5 * 60 * 1000, maxBuffer: 50 * 1024 * 1024 });
+    ], { timeout: 3 * 60 * 1000, maxBuffer: 50 * 1024 * 1024 });
 
     const parsed = JSON.parse(stdout);
     const findings: ScanFinding[] = (parsed.results ?? []).map((r: Record<string, unknown>, i: number) => ({

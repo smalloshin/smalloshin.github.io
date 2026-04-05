@@ -29,8 +29,23 @@ export async function createProject(input: {
     [input.name, slug, input.sourceType, input.sourceUrl ?? null, JSON.stringify(input.config ?? {})]
   );
 
-  await logTransition(result.rows[0].id, null, 'submitted', 'system', { action: 'create' });
-  return rowToProject(result.rows[0]);
+  // Ensure every project belongs to a group — singleton projects group by themselves.
+  const row = result.rows[0];
+  const cfg = (typeof row.config === 'string' ? JSON.parse(row.config) : row.config) ?? {};
+  if (!cfg.projectGroup) {
+    cfg.projectGroup = row.id as string;
+    cfg.groupName = cfg.groupName ?? input.name;
+    await query('UPDATE projects SET config = $1 WHERE id = $2', [JSON.stringify(cfg), row.id]);
+    row.config = cfg;
+  } else if (!cfg.groupName) {
+    // Backfill groupName from current name if monorepo flow forgot it
+    cfg.groupName = input.name.replace(/-(?:backend|frontend|api|web|worker|server|client|app)$/i, '');
+    await query('UPDATE projects SET config = $1 WHERE id = $2', [JSON.stringify(cfg), row.id]);
+    row.config = cfg;
+  }
+
+  await logTransition(row.id, null, 'submitted', 'system', { action: 'create' });
+  return rowToProject(row);
 }
 
 export async function transitionProject(
@@ -91,6 +106,7 @@ export async function updateScanReport(
     verificationResults: unknown;
     threatSummary: string;
     costEstimate: unknown;
+    resourcePlan: unknown;
     status: string;
   }>
 ): Promise<ScanReport> {
@@ -105,6 +121,7 @@ export async function updateScanReport(
   if (updates.verificationResults !== undefined) { sets.push(`verification_results = $${idx++}`); params.push(JSON.stringify(updates.verificationResults)); }
   if (updates.threatSummary !== undefined) { sets.push(`threat_summary = $${idx++}`); params.push(updates.threatSummary); }
   if (updates.costEstimate !== undefined) { sets.push(`cost_estimate = $${idx++}`); params.push(JSON.stringify(updates.costEstimate)); }
+  if (updates.resourcePlan !== undefined) { sets.push(`resource_plan = $${idx++}`); params.push(JSON.stringify(updates.resourcePlan)); }
   if (updates.status !== undefined) { sets.push(`status = $${idx++}`); params.push(updates.status); }
 
   params.push(id);
@@ -255,16 +272,60 @@ function rowToProject(row: Record<string, unknown>): Project {
 }
 
 function rowToScanReport(row: Record<string, unknown>): ScanReport {
+  // Parse findings from DB JSON columns
+  const semgrepFindings = parseJsonField(row.semgrep_findings) as Array<Record<string, unknown>> ?? [];
+  const trivyFindings = parseJsonField(row.trivy_findings) as Array<Record<string, unknown>> ?? [];
+  const llmAnalysis = parseJsonField(row.llm_analysis) as {
+    findings?: Array<Record<string, unknown>>;
+    autoFixes?: Array<Record<string, unknown>>;
+    summary?: string;
+  } | null;
+  // auto_fixes column stores apply results: {applied, diff, explanation, verificationPassed}
+  const applyResults = (parseJsonField(row.auto_fixes) as Array<Record<string, unknown>>) ?? [];
+  // LLM auto-fix suggestions: {findingId, filePath, originalCode, fixedCode, explanation}
+  const llmAutoFixes = llmAnalysis?.autoFixes ?? [];
+
+  // Merge all findings into one list
+  const allFindings = [
+    ...semgrepFindings,
+    ...trivyFindings,
+    ...(llmAnalysis?.findings ?? []),
+  ];
+
+  // Merge auto-fix data: combine LLM suggestions with apply results
+  // Each LLM suggestion may have a corresponding apply result
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mergedAutoFixes: any[] = llmAutoFixes.map((suggestion, i) => ({
+    ...suggestion,
+    applied: applyResults[i]?.applied ?? false,
+    diff: applyResults[i]?.diff ?? '',
+  }));
+  // If there are more apply results than suggestions (shouldn't happen, but safe)
+  for (let i = llmAutoFixes.length; i < applyResults.length; i++) {
+    mergedAutoFixes.push(applyResults[i]);
+  }
+
   return {
     id: row.id as string,
     projectId: row.project_id as string,
     version: row.version as number,
-    findings: [],
+    findings: allFindings as unknown as ScanReport['findings'],
+    autoFixes: mergedAutoFixes as unknown as ScanReport['autoFixes'],
     threatSummary: (row.threat_summary as string) ?? '',
     costEstimate: row.cost_estimate as ScanReport['costEstimate'],
+    resourcePlan: (parseJsonField(row.resource_plan) as ScanReport['resourcePlan']) ?? null,
     status: row.status as ScanReport['status'],
     createdAt: new Date(row.created_at as string),
   };
+}
+
+function parseJsonField(val: unknown): unknown {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'object') return val; // already parsed by pg driver
+  if (typeof val === 'string') {
+    try { return JSON.parse(val); } catch { return null; }
+  }
+  return null;
 }
 
 function rowToReview(row: Record<string, unknown>): Review {

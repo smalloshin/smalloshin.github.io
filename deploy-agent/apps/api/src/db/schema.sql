@@ -32,11 +32,15 @@ CREATE TABLE IF NOT EXISTS scan_reports (
   verification_results JSONB,
   threat_summary TEXT,
   cost_estimate JSONB,
+  resource_plan JSONB,
   status VARCHAR(50) NOT NULL DEFAULT 'scanning',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_scan_reports_project ON scan_reports(project_id);
+
+-- Migration for existing installs: add resource_plan column if missing
+ALTER TABLE scan_reports ADD COLUMN IF NOT EXISTS resource_plan JSONB;
 
 -- Reviews
 CREATE TABLE IF NOT EXISTS reviews (
@@ -85,3 +89,17 @@ CREATE TABLE IF NOT EXISTS state_transitions (
 
 CREATE INDEX IF NOT EXISTS idx_state_transitions_project ON state_transitions(project_id);
 CREATE INDEX IF NOT EXISTS idx_state_transitions_created ON state_transitions(created_at);
+
+-- Backfill: ensure every project has a projectGroup + groupName (singletons group by their own id)
+UPDATE projects
+SET config = jsonb_set(
+               jsonb_set(config, '{projectGroup}', to_jsonb(id::text)),
+               '{groupName}', to_jsonb(name)
+             )
+WHERE config->>'projectGroup' IS NULL;
+
+UPDATE projects
+SET config = jsonb_set(config, '{groupName}', to_jsonb(name))
+WHERE config->>'groupName' IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_projects_group ON projects((config->>'projectGroup'));
