@@ -29,3 +29,4 @@
 |------|------|------|------|
 | 2026-04-05 | [gcs-sources-lifecycle-30d](./2026-04-05-gcs-sources-lifecycle-30d.md) | Active | GCS source tarball 30 天自動刪除，防止無限成長 |
 | 2026-04-05 | [artifact-registry-cleanup](./2026-04-05-artifact-registry-cleanup.md) | Active | AR repo keep last 5 tagged + 清 7d untagged / 30d tagged |
+| 2026-04-05 | [terraform-disaster-recovery](./2026-04-05-terraform-disaster-recovery.md) | Active | 用 Terraform + bootstrap.sh 實現 agent 一指令重建；secrets 搬到 Secret Manager |

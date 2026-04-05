@@ -4,6 +4,15 @@
 
 ## 上次進度（Last Progress）
 
+**2026-04-05（深夜）**
+
+- ✅ Terraform DR 系統：9 個 .tf 檔 + `bootstrap.sh` + `README.md` + `terraform.tfvars.example`
+  - 涵蓋：APIs、dedicated SA+IAM、Secret Manager（6 secrets）、GCS+lifecycle、AR+cleanup、Cloud SQL（backup+PITR+deletion_protection）、Redis VM、Cloud Run api+web（secrets 由 Secret Manager 注入）、domain mappings
+  - Remote state 在 `${project}-tfstate` GCS bucket（versioned）
+  - **尚未跑過**：需在 throwaway project 驗證
+- ⚠️ **發現安全問題**：現 prod Cloud Run env vars 有 6 個明文 secrets（Anthropic/OpenAI keys、GitHub PAT、Cloudflare token、DB password、Redis password）→ TF 已把它們全部搬到 Secret Manager，但 live prod 還沒 migrate
+- ✅ 第 3 份 decision 檔：`2026-04-05-terraform-disaster-recovery.md`
+
 **2026-04-05（晚上）**
 
 - ✅ Dashboard 新增「基礎設施」頁（`/infra`）
@@ -45,6 +54,9 @@
 - [x] ~~**Artifact Registry cleanup**~~（2026-04-05 完成：keep 5 tagged + 清 7d untagged / 30d tagged，見 `decisions/2026-04-05-artifact-registry-cleanup.md`）
 - [x] ~~**Dashboard GCP 資源管理頁**~~（2026-04-05 完成：`/infra` 頁 + orphan cleanup 一鍵清理）
 - [ ] **執行 orphan cleanup**：首次清理 39 個 tarball + 1 AR package（用 dashboard 按鈕即可）
+- [ ] **驗證 bootstrap.sh**：在 throwaway GCP project 跑一次完整 `./terraform/bootstrap.sh`
+- [ ] **migrate prod secrets 到 Secret Manager**：目前 6 個 keys 是明文 env vars，高風險
+- [ ] **Terraform import 現有 prod 資源**：寫 `terraform/IMPORT.md` 並執行，讓 TF 實際管住現況（消除 drift risk）
 
 ### 中優先
 - [ ] Terraform for agent 自身 infra（目前是手動 gcloud deploy）
