@@ -4,6 +4,19 @@
 
 ## 上次進度（Last Progress）
 
+**2026-04-05（凌晨後續）**
+
+- ✅ 遷移 prod Cloud Run 到 `deploy-agent@` SA（api + web 兩個 service 都切了）
+  - 補了 3 個 role：`logging.logWriter`、`monitoring.metricWriter`、`storage.admin`（取代 objectAdmin，因為 objectAdmin 沒有 buckets.get）
+  - SA 從 `roles/editor`（萬能）→ 12 個具名 role（最小權限）
+- ✅ `cloudbuild.yaml` 明確綁定 `--service-account=deploy-agent@...`，防止被意外改掉
+- ✅ Terraform README 改寫成中文，同步現況
+- ✅ 修 luca-app 403 bug
+  - 現象：`Error: Forbidden. Your client does not have permission to get URL / from this server.`
+  - 急救：手動 `gcloud run services add-iam-policy-binding` 補 allUsers invoker
+  - 根源：`deploy-worker.ts` 的 `allowUnauthenticated` default 是 `false`（其他檔案都是 `true`），導致部署時跳過 setIamPolicy → IAM 空白 → 403
+  - 已修：default 改成 `true`，與其他檔案一致
+
 **2026-04-05（凌晨，一步一步做完為止）**
 
 - ✅ 明文 secrets migrate 完成：prod Cloud Run 已用 `--update-secrets` 切到 Secret Manager，新 revision 服務正常
