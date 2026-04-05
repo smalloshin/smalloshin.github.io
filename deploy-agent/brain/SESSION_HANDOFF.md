@@ -4,11 +4,23 @@
 
 ## 上次進度（Last Progress）
 
+**2026-04-05（晚上）**
+
+- ✅ Dashboard 新增「基礎設施」頁（`/infra`）
+  - Artifact Registry（repo 大小、cleanup policy 狀態、每 package 版本數）
+  - Cloud Storage（sources/ bucket 統計、lifecycle rule 狀態）
+  - Cloud Run（agent 自身 services 狀態 + Ready 燈號）
+- ✅ 孤兒資源清理：橫幅顯示 orphan count + 一鍵清理（POST /api/infra/cleanup-orphans）
+- ✅ 3 個新 API endpoints：`/api/infra/overview`, `/api/infra/orphans`, `/api/infra/cleanup-orphans`
+- ✅ 修 bug：Cloud Run v2 API ready 狀態要讀 `terminalCondition` 不是 `conditions[]`
+- ✅ 驗證 on https://wave-deploy-agent.punwave.com/infra：39 個 orphan tarball (9.9 MB) + 1 orphan AR package (`deploy-agent-api` 舊命名) 已偵測到
+
 **2026-04-05（下午）**
 
 - ✅ 建立 brain 會話管理系統（CLAUDE.md + SESSION_HANDOFF.md + decisions/index.md）
 - ✅ GCS sources lifecycle：30 天自動刪除已套用（bucket: `wave-deploy-agent_cloudbuild`, prefix: `sources/`）
-- ✅ 第一份 decision 檔：`2026-04-05-gcs-sources-lifecycle-30d.md`
+- ✅ Artifact Registry cleanup policy：keep 5 tagged + 清 7d untagged / 30d tagged
+- ✅ 2 份 decision 檔：`2026-04-05-gcs-sources-lifecycle-30d.md`, `2026-04-05-artifact-registry-cleanup.md`
 
 **2026-04-05（上午）**
 
@@ -31,7 +43,8 @@
 ### 高優先
 - [x] ~~**GCS lifecycle rule**：為 `gs://wave-deploy-agent_cloudbuild/sources/` 設 30 天自動刪除~~（2026-04-05 完成，見 `decisions/2026-04-05-gcs-sources-lifecycle-30d.md`）
 - [x] ~~**Artifact Registry cleanup**~~（2026-04-05 完成：keep 5 tagged + 清 7d untagged / 30d tagged，見 `decisions/2026-04-05-artifact-registry-cleanup.md`）
-- [ ] **Dashboard GCP 資源管理頁**：直接在 UI 看 repo 大小 / GCS usage / lifecycle 狀態 / Cloud Run 服務總表（詳見下方「架構想法」）
+- [x] ~~**Dashboard GCP 資源管理頁**~~（2026-04-05 完成：`/infra` 頁 + orphan cleanup 一鍵清理）
+- [ ] **執行 orphan cleanup**：首次清理 39 個 tarball + 1 AR package（用 dashboard 按鈕即可）
 
 ### 中優先
 - [ ] Terraform for agent 自身 infra（目前是手動 gcloud deploy）
