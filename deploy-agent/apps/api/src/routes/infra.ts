@@ -40,7 +40,7 @@ interface GcsObject {
 interface CloudRunService {
   name: string;
   uri?: string;
-  conditions?: Array<{ type: string; state: string }>;
+  terminalCondition?: { type: string; state: string };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -158,15 +158,12 @@ async function getCloudRunServices() {
   const services = await fetchAllPages<CloudRunService & { uri?: string; updateTime?: string }>(url, 'services');
 
   return services
-    .map((s) => {
-      const readyCond = (s.conditions ?? []).find((c) => c.type === 'Ready');
-      return {
-        name: shortName(s.name),
-        url: s.uri ?? null,
-        ready: readyCond?.state === 'CONDITION_SUCCEEDED',
-        region: GCP_REGION,
-      };
-    })
+    .map((s) => ({
+      name: shortName(s.name),
+      url: s.uri ?? null,
+      ready: s.terminalCondition?.state === 'CONDITION_SUCCEEDED',
+      region: GCP_REGION,
+    }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
