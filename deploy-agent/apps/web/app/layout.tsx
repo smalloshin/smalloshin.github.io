@@ -40,6 +40,7 @@ function Sidebar() {
         <NavLink href="/" label="專案" />
         <NavLink href="/reviews" label="審查" />
         <NavLink href="/deploys" label="部署紀錄" />
+        <NavLink href="/infra" label="基礎設施" />
         <NavLink href="/settings" label="設定" />
       </div>
     </nav>
