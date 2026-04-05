@@ -629,6 +629,22 @@ export async function getServiceEnvVars(
   return env;
 }
 
+// Returns the image URI currently running on a Cloud Run service, or null
+// if the service doesn't exist.
+export async function getServiceImage(
+  gcpProject: string,
+  gcpRegion: string,
+  serviceName: string,
+): Promise<string | null> {
+  const serviceUrl = `https://run.googleapis.com/v2/projects/${gcpProject}/locations/${gcpRegion}/services/${serviceName}`;
+  const res = await gcpFetch(serviceUrl);
+  if (!res.ok) return null;
+  const service = await res.json() as {
+    template?: { containers?: Array<{ image?: string }> };
+  };
+  return service.template?.containers?.[0]?.image ?? null;
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
