@@ -20,6 +20,7 @@ import { detectEnvVars, mergeEnvVars } from './env-detector';
 import { analyzeEnvVarsWithLLM } from './llm-analyzer';
 import { provisionProjectDatabase } from './db-provisioner';
 import { provisionProjectRedis } from './redis-provisioner';
+import { restoreDbDump } from './db-restore';
 
 export async function runDeployPipeline(
   projectId: string,
@@ -342,6 +343,75 @@ export async function runDeployPipeline(
       } catch (err) {
         console.error(`[Deploy]   DB provisioning failed: ${(err as Error).message}`);
         console.warn(`[Deploy]   Continuing with existing DATABASE_URL (may fail at runtime)`);
+      }
+    }
+
+    // ── Step 2c-2: Restore DB dump if user provided one ──
+    const gcsDbDumpUri = project.config?.gcsDbDumpUri as string | undefined;
+    if (gcsDbDumpUri && needsCloudSql) {
+      currentStep = 'Step 2c-2: Restore database dump';
+      console.log(`[Deploy] ${currentStep}...`);
+
+      try {
+        // Download dump from GCS to local temp file
+        const withoutPrefix = gcsDbDumpUri.slice(5); // remove "gs://"
+        const slashIdx = withoutPrefix.indexOf('/');
+        const bucket = withoutPrefix.slice(0, slashIdx);
+        const object = withoutPrefix.slice(slashIdx + 1);
+        const downloadUrl = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(object)}?alt=media`;
+
+        const { gcpFetch } = await import('./gcp-auth');
+        const resp = await gcpFetch(downloadUrl);
+        if (!resp.ok) {
+          throw new Error(`GCS download failed (${resp.status}): ${await resp.text()}`);
+        }
+
+        const { writeFileSync, unlinkSync } = await import('node:fs');
+        const dumpFileName = (project.config?.dbDumpFileName as string) || 'dump.sql';
+        const dumpLocalPath = `/tmp/db-dump-${project.id}-${dumpFileName}`;
+        const buf = Buffer.from(await resp.arrayBuffer());
+        writeFileSync(dumpLocalPath, buf);
+        console.log(`[Deploy]   Downloaded dump: ${(buf.length / 1024 / 1024).toFixed(1)} MB`);
+
+        // Find the project's DATABASE_URL (set by db-provisioner in the step above)
+        const dbUrl = dbVarKeys.map(k => finalEnvVars[k]).find(v => v && v.includes('/cloudsql/'));
+        if (!dbUrl) {
+          throw new Error('No Cloud SQL DATABASE_URL found — cannot restore dump without a provisioned database');
+        }
+
+        const restoreResult = await restoreDbDump({
+          dumpFilePath: dumpLocalPath,
+          connectionString: dbUrl,
+          instanceConnectionName: cloudSqlInstance!,
+        });
+
+        if (restoreResult.success) {
+          console.log(`[Deploy]   DB dump restored successfully (${restoreResult.format}, ${restoreResult.durationMs}ms)`);
+        } else {
+          console.warn(`[Deploy]   ⚠ DB dump restore had errors: ${restoreResult.error}`);
+          console.warn(`[Deploy]   Continuing deployment — the app may need manual DB setup`);
+        }
+
+        // Store result in project config for dashboard visibility
+        try {
+          const configUpdate = {
+            ...(project.config ?? {}),
+            dbRestoreResult: {
+              success: restoreResult.success,
+              format: restoreResult.format,
+              durationMs: restoreResult.durationMs,
+              bytesRestored: restoreResult.bytesRestored,
+              error: restoreResult.error,
+            },
+          };
+          await updateProjectConfig(project.id, configUpdate);
+        } catch { /* non-critical */ }
+
+        // Cleanup temp file
+        try { unlinkSync(dumpLocalPath); } catch { /* ignore */ }
+      } catch (err) {
+        console.error(`[Deploy]   DB dump restore failed: ${(err as Error).message}`);
+        console.warn(`[Deploy]   Continuing deployment without DB restore`);
       }
     }
 

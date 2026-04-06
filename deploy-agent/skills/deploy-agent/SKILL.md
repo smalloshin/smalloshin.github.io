@@ -28,6 +28,7 @@ Dashboard：https://wave-deploy-agent.punwave.com
 - **來源方式**（必填）— `upload`（上傳壓縮檔）或 `git`（Git 倉庫 URL）
 - **自訂網域**（選填）— 例如 `my-app`（會變成 `my-app.punwave.com`）
 - **是否公開**（選填）— 預設 `true`，允許未驗證存取
+- **資料庫 Dump**（選填）— `.sql`、`.dump` 或 `.sql.gz` 檔案路徑，部署時自動匯入
 
 ### Step 2: 提交專案
 
@@ -44,7 +45,8 @@ curl -s -X POST "https://wave-deploy-agent-api.punwave.com/api/projects/upload" 
   -F "sourceType=upload" \
   -F "customDomain=SUBDOMAIN" \
   -F "allowUnauthenticated=true" \
-  -F "file=@/tmp/PROJECT_NAME.tgz"
+  -F "file=@/tmp/PROJECT_NAME.tgz" \
+  -F "dbDump=@/path/to/dump.sql"  # 選填：資料庫 dump 檔
 ```
 
 **方式 B — Git 倉庫：**
@@ -52,7 +54,8 @@ curl -s -X POST "https://wave-deploy-agent-api.punwave.com/api/projects/upload" 
 curl -s -X POST "https://wave-deploy-agent-api.punwave.com/api/projects/upload" \
   -F "name=PROJECT_NAME" \
   -F "sourceType=git" \
-  -F "gitUrl=https://github.com/owner/repo"
+  -F "gitUrl=https://github.com/owner/repo" \
+  -F "dbDump=@/path/to/dump.sql"  # 選填：資料庫 dump 檔
 ```
 
 記下回傳的 `project.id`。
@@ -163,13 +166,38 @@ curl -s "https://wave-deploy-agent-api.punwave.com/api/deploys"
 
 ---
 
+### 帶資料庫 Dump 部署
+
+如果使用者提供了資料庫 dump 檔（`.sql`、`.dump`、`.pgdump`、`.sql.gz`），部署時會：
+1. 自動建立專案專屬的 PostgreSQL 資料庫（Cloud SQL）
+2. 用 `psql` 或 `pg_restore` 匯入 dump 檔
+3. 把 `DATABASE_URL` 指向新建的資料庫
+
+```bash
+# 範例：帶 SQL dump 部署
+tar -czf /tmp/my-app.tgz -C /path/to/project .
+curl -s -X POST "https://wave-deploy-agent-api.punwave.com/api/projects/upload" \
+  -F "name=my-app" \
+  -F "sourceType=upload" \
+  -F "file=@/tmp/my-app.tgz" \
+  -F "dbDump=@/path/to/production.sql"
+```
+
+支援的格式：
+- `.sql` — 純 SQL（`pg_dump --format=plain`）
+- `.dump` / `.pgdump` — 自訂格式（`pg_dump --format=custom`）
+- `.sql.gz` — 壓縮的純 SQL
+
+---
+
 ## Pipeline 流程
 
 ```
 提交 → 語言偵測 → Dockerfile 生成 → SAST 掃描 → SCA 掃描
   → AI 威脅分析 → 自動修復 → 驗證掃描 → 審查報告
-  → 成本估算 → 【人工審查】→ Cloud Build → Cloud Run
-  → 網域設定 → SSL 憑證 → Canary 檢查 → 🎉 上線！
+  → 成本估算 → 【人工審查】→ DB 建立 → DB Dump 匯入（如有）
+  → Cloud Build → Cloud Run → 網域設定 → SSL 憑證
+  → Canary 檢查 → 🎉 上線！
 ```
 
 ## MCP 工具

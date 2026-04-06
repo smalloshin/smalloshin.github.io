@@ -248,6 +248,7 @@ function SubmitModal({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
   const [customDomain, setCustomDomain] = useState('');
   const [allowUnauth] = useState(true); // Always public — deploy agent projects are meant for public access
   const [envVarsText, setEnvVarsText] = useState('');
+  const [dbDumpFile, setDbDumpFile] = useState<File | null>(null);
   const [showEnvVars, setShowEnvVars] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -289,6 +290,9 @@ function SubmitModal({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
         formData.append('gitUrl', gitUrl.trim());
       } else if (file) {
         formData.append('file', file);
+      }
+      if (dbDumpFile) {
+        formData.append('dbDump', dbDumpFile);
       }
 
       const res = await fetch(`${API}/api/projects/upload`, {
@@ -449,6 +453,62 @@ function SubmitModal({ onClose, onSubmitted }: { onClose: () => void; onSubmitte
         />
 
         {/* allowUnauthenticated is always true — deploy agent projects are public by default */}
+
+        {/* DB Dump upload (optional) */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: 'block', fontSize: 13, marginBottom: 4, color: 'var(--text-secondary)' }}>
+            資料庫 Dump（選填）
+          </label>
+          <div
+            onClick={() => {
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = '.sql,.dump,.pgdump,.sql.gz';
+              input.onchange = () => {
+                const f = input.files?.[0];
+                if (f) setDbDumpFile(f);
+              };
+              input.click();
+            }}
+            style={{
+              border: `1px solid ${dbDumpFile ? 'var(--status-live)' : 'var(--border)'}`,
+              borderRadius: 6,
+              padding: '8px 12px',
+              cursor: 'pointer',
+              background: 'var(--bg-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 13,
+            }}
+          >
+            {dbDumpFile ? (
+              <>
+                <span style={{ fontSize: 16 }}>{'\uD83D\uDDC3\uFE0F'}</span>
+                <div style={{ flex: 1 }}>
+                  <span style={{ color: 'var(--text-primary)' }}>{dbDumpFile.name}</span>
+                  <span style={{ color: 'var(--text-secondary)', marginLeft: 8 }}>
+                    ({(dbDumpFile.size / 1024 / 1024).toFixed(1)} MB)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setDbDumpFile(null); }}
+                  style={{
+                    background: 'none', border: 'none', color: 'var(--text-secondary)',
+                    cursor: 'pointer', fontSize: 16, padding: '0 4px',
+                  }}
+                >
+                  ✕
+                </button>
+              </>
+            ) : (
+              <span style={{ color: 'var(--text-secondary)' }}>
+                點擊上傳 .sql、.dump 或 .sql.gz（部署時自動匯入資料庫）
+              </span>
+            )}
+          </div>
+        </div>
 
         <div style={{ marginBottom: 16 }}>
           <button

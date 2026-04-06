@@ -77,6 +77,33 @@ async function uploadSourceToGcs(
   return gcsUri;
 }
 
+// Upload a DB dump file to GCS for later restore during deploy
+async function uploadDbDumpToGcs(
+  projectSlug: string,
+  dumpBuffer: Buffer,
+  dumpFileName: string,
+): Promise<string> {
+  const gcpProject = process.env.GCP_PROJECT || 'wave-deploy-agent';
+  const bucket = `${gcpProject}_cloudbuild`;
+  const objectName = `db-dumps/${projectSlug}-${Date.now()}-${dumpFileName}`;
+
+  const uploadUrl = `https://storage.googleapis.com/upload/storage/v1/b/${bucket}/o?uploadType=media&name=${encodeURIComponent(objectName)}`;
+  const res = await gcpFetch(uploadUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: dumpBuffer,
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`GCS upload failed (${res.status}): ${err}`);
+  }
+
+  const gcsUri = `gs://${bucket}/${objectName}`;
+  console.log(`[Upload] DB dump uploaded to ${gcsUri} (${(dumpBuffer.length / 1024 / 1024).toFixed(1)} MB)`);
+  return gcsUri;
+}
+
 const submitSchema = z.object({
   name: z.string().min(1).max(255),
   sourceType: z.enum(['upload', 'git', 'openclaw']),
@@ -144,6 +171,8 @@ export async function projectRoutes(app: FastifyInstance) {
     let envVarsRaw = '';
     let fileBuffer: Buffer | null = null;
     let fileName = '';
+    let dbDumpBuffer: Buffer | null = null;
+    let dbDumpFileName = '';
 
     for await (const part of parts) {
       if (part.type === 'field') {
@@ -158,6 +187,9 @@ export async function projectRoutes(app: FastifyInstance) {
       } else if (part.type === 'file' && part.fieldname === 'file') {
         fileName = part.filename;
         fileBuffer = await part.toBuffer();
+      } else if (part.type === 'file' && part.fieldname === 'dbDump') {
+        dbDumpFileName = part.filename;
+        dbDumpBuffer = await part.toBuffer();
       }
     }
 
@@ -171,6 +203,18 @@ export async function projectRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'Git URL is required' });
       }
       const userEnvVars = parseEnvVarsText(envVarsRaw);
+
+      // Upload DB dump to GCS if provided
+      let gcsDbDumpUri: string | undefined;
+      if (dbDumpBuffer && dbDumpFileName) {
+        const gitSlug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+        try {
+          gcsDbDumpUri = await uploadDbDumpToGcs(gitSlug, dbDumpBuffer, dbDumpFileName);
+        } catch (err) {
+          console.error(`[Upload] DB dump upload failed:`, (err as Error).message);
+        }
+      }
+
       const project = await createProject({
         name: name.trim(),
         sourceType: 'git',
@@ -181,6 +225,8 @@ export async function projectRoutes(app: FastifyInstance) {
           forceDomain,
           allowUnauthenticated,
           envVars: Object.keys(userEnvVars).length > 0 ? userEnvVars : undefined,
+          gcsDbDumpUri,
+          dbDumpFileName: dbDumpFileName || undefined,
         },
       });
       await transitionProject(project.id, 'scanning', 'system', { trigger: 'auto' });
@@ -303,6 +349,17 @@ export async function projectRoutes(app: FastifyInstance) {
       const userEnvVars = parseEnvVarsText(envVarsRaw);
       const createdProjects: Array<{ project: unknown; scanReport: unknown }> = [];
 
+      // Upload DB dump for monorepo (only backend services will restore it)
+      let gcsDbDumpUri: string | undefined;
+      if (dbDumpBuffer && dbDumpFileName) {
+        const groupSlug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+        try {
+          gcsDbDumpUri = await uploadDbDumpToGcs(groupSlug, dbDumpBuffer, dbDumpFileName);
+        } catch (err) {
+          console.error(`[Upload] DB dump upload failed:`, (err as Error).message);
+        }
+      }
+
       // Classify services: 'backend' deploys first, 'frontend' deploys after
       const classifyService = (dirName: string, serviceDir: string): 'backend' | 'frontend' => {
         const lower = dirName.toLowerCase();
@@ -357,6 +414,9 @@ export async function projectRoutes(app: FastifyInstance) {
             allowUnauthenticated,
             gcsSourceUri,
             envVars: Object.keys(userEnvVars).length > 0 ? userEnvVars : undefined,
+            // DB dump (only backend services will restore it)
+            gcsDbDumpUri: svc.role === 'backend' ? gcsDbDumpUri : undefined,
+            dbDumpFileName: svc.role === 'backend' ? (dbDumpFileName || undefined) : undefined,
             // Monorepo metadata
             projectGroup: groupId,
             groupName: name.trim(),
@@ -398,6 +458,17 @@ export async function projectRoutes(app: FastifyInstance) {
     }
 
     const userEnvVars = parseEnvVarsText(envVarsRaw);
+
+    // Upload DB dump to GCS if provided
+    let gcsDbDumpUri: string | undefined;
+    if (dbDumpBuffer && dbDumpFileName) {
+      try {
+        gcsDbDumpUri = await uploadDbDumpToGcs(projectSlug, dbDumpBuffer, dbDumpFileName);
+      } catch (err) {
+        console.error(`[Upload] DB dump upload failed:`, (err as Error).message);
+      }
+    }
+
     const project = await createProject({
       name: name.trim(),
       sourceType: 'upload',
@@ -408,6 +479,8 @@ export async function projectRoutes(app: FastifyInstance) {
         forceDomain,
         allowUnauthenticated,
         gcsSourceUri,  // persisted source for deploy step
+        gcsDbDumpUri,  // DB dump for restore during deploy
+        dbDumpFileName: dbDumpFileName || undefined,
         envVars: Object.keys(userEnvVars).length > 0 ? userEnvVars : undefined,
       },
     });

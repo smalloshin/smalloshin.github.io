@@ -36,6 +36,7 @@ const TOOLS = [
         project_name: { type: 'string', description: 'Project name' },
         custom_domain: { type: 'string', description: 'Custom domain (optional)' },
         allow_unauthenticated: { type: 'boolean', description: 'Allow public access (requires senior review)' },
+        db_dump_path: { type: 'string', description: 'Path to a database dump file (.sql, .dump, .sql.gz) to restore during deployment (optional)' },
       },
       required: ['source', 'path_or_url', 'project_name'],
     },
@@ -111,6 +112,41 @@ async function handleToolCall(call: MCPToolCall): Promise<MCPToolResult> {
   try {
     switch (call.name) {
       case 'submit_project': {
+        // If db_dump_path is provided, upload it to GCS
+        let gcsDbDumpUri: string | undefined;
+        let dbDumpFileName: string | undefined;
+        const dbDumpPath = call.arguments.db_dump_path as string | undefined;
+        if (dbDumpPath) {
+          try {
+            const { readFileSync, existsSync } = await import('node:fs');
+            const { basename } = await import('node:path');
+            if (!existsSync(dbDumpPath)) {
+              return error(`DB dump file not found: ${dbDumpPath}`);
+            }
+            dbDumpFileName = basename(dbDumpPath);
+            const dumpBuffer = readFileSync(dbDumpPath);
+            const projectSlug = (call.arguments.project_name as string).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60);
+            const gcpProject = process.env.GCP_PROJECT || 'wave-deploy-agent';
+            const bucket = `${gcpProject}_cloudbuild`;
+            const objectName = `db-dumps/${projectSlug}-${Date.now()}-${dbDumpFileName}`;
+            const uploadUrl = `https://storage.googleapis.com/upload/storage/v1/b/${bucket}/o?uploadType=media&name=${encodeURIComponent(objectName)}`;
+            const { gcpFetch } = await import('../services/gcp-auth');
+            const uploadRes = await gcpFetch(uploadUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/octet-stream' },
+              body: dumpBuffer,
+            });
+            if (uploadRes.ok) {
+              gcsDbDumpUri = `gs://${bucket}/${objectName}`;
+              console.log(`[MCP] DB dump uploaded to ${gcsDbDumpUri}`);
+            } else {
+              console.warn(`[MCP] DB dump upload failed: HTTP ${uploadRes.status}`);
+            }
+          } catch (err) {
+            console.warn(`[MCP] DB dump upload error: ${(err as Error).message}`);
+          }
+        }
+
         const project = await createProject({
           name: call.arguments.project_name as string,
           sourceType: call.arguments.source === 'git_url' ? 'git' : 'upload',
@@ -118,9 +154,12 @@ async function handleToolCall(call: MCPToolCall): Promise<MCPToolResult> {
           config: {
             customDomain: call.arguments.custom_domain as string | undefined,
             allowUnauthenticated: (call.arguments.allow_unauthenticated as boolean) ?? false,
+            gcsDbDumpUri,
+            dbDumpFileName,
           },
         });
-        return text(`Project "${project.name}" submitted (ID: ${project.id}). Status: ${project.status}. Security scanning will begin shortly.`);
+        const dbMsg = gcsDbDumpUri ? ' Database dump will be restored during deployment.' : '';
+        return text(`Project "${project.name}" submitted (ID: ${project.id}). Status: ${project.status}. Security scanning will begin shortly.${dbMsg}`);
       }
 
       case 'get_project_status': {

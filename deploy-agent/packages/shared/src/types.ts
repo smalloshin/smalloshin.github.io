@@ -56,6 +56,27 @@ export interface ProjectConfig {
   siblings?: Array<{ name: string; role: string; dirName: string }>;
   // Cached last-deployed image for stop/start lifecycle
   lastDeployedImage?: string;      // e.g. asia-east1-docker.pkg.dev/.../api:v123
+  // Domain conflict handling
+  forceDomain?: boolean;           // Override existing domain mapping if conflict detected
+  // Backend URL resolved after deploy (for monorepo frontend→backend wiring)
+  resolvedBackendUrl?: string;
+  // Database dump restore
+  gcsDbDumpUri?: string;           // GCS URI of user-uploaded DB dump file
+  dbDumpFileName?: string;         // Original filename (for format detection)
+  dbRestoreResult?: {
+    success: boolean;
+    format: string;
+    durationMs: number;
+    bytesRestored: number;
+    error: string | null;
+  };
+  // LLM env var analysis results (for dashboard visibility)
+  envAnalysis?: {
+    placeholders: Array<{ variable: string; value: string; reason: string }>;
+    missingCritical: Array<{ variable: string; reason: string }>;
+    recommendations: string[];
+    provider: string;
+  };
 }
 
 // ─── Project Group (aggregated view of related services + resources) ───
