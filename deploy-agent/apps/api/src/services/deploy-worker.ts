@@ -17,6 +17,7 @@ import { monitorSsl } from './ssl-monitor';
 import { runCanaryChecks } from './canary-monitor';
 import { detectProject } from './project-detector';
 import { detectEnvVars, mergeEnvVars } from './env-detector';
+import { analyzeEnvVarsWithLLM } from './llm-analyzer';
 import { provisionProjectDatabase } from './db-provisioner';
 import { provisionProjectRedis } from './redis-provisioner';
 
@@ -172,50 +173,141 @@ export async function runDeployPipeline(
     const finalEnvVars = mergeEnvVars(envDetection.detected, userEnvVars);
     console.log(`[Deploy]   ENV total: ${Object.keys(finalEnvVars).length} vars (${Object.keys(envDetection.detected).length} auto + ${Object.keys(userEnvVars).length} user)`);
 
+    // ── LLM-powered env var analysis: detect placeholders & missing critical vars ──
+    try {
+      const llmEnvResult = await analyzeEnvVarsWithLLM(
+        finalEnvVars,
+        envDetection.missing,
+        detectedFramework,
+        detectedLanguage,
+      );
+      if (llmEnvResult.placeholders.length > 0) {
+        console.warn(`[Deploy]   ⚠ LLM detected ${llmEnvResult.placeholders.length} placeholder env var(s):`);
+        for (const ph of llmEnvResult.placeholders) {
+          console.warn(`[Deploy]     ${ph.variable} = "${String(finalEnvVars[ph.variable] ?? '').slice(0, 30)}..." — ${ph.reason}`);
+          // Remove placeholder from env vars so app doesn't run with fake secrets
+          delete finalEnvVars[ph.variable];
+          if (!envDetection.missing.includes(ph.variable)) {
+            envDetection.missing.push(ph.variable);
+          }
+        }
+      }
+      if (llmEnvResult.missingCritical.length > 0) {
+        console.warn(`[Deploy]   ⚠ LLM detected ${llmEnvResult.missingCritical.length} missing critical var(s):`);
+        for (const mc of llmEnvResult.missingCritical) {
+          console.warn(`[Deploy]     ${mc.variable} — ${mc.reason}`);
+          if (!envDetection.missing.includes(mc.variable)) {
+            envDetection.missing.push(mc.variable);
+          }
+        }
+      }
+      if (llmEnvResult.recommendations.length > 0) {
+        for (const rec of llmEnvResult.recommendations) {
+          console.log(`[Deploy]   LLM recommendation: ${rec}`);
+        }
+      }
+      // Store analysis in project config for dashboard visibility
+      try {
+        const configUpdate = {
+          ...(project.config ?? {}),
+          envAnalysis: {
+            placeholders: llmEnvResult.placeholders,
+            missingCritical: llmEnvResult.missingCritical,
+            recommendations: llmEnvResult.recommendations,
+            provider: llmEnvResult.provider,
+          },
+        };
+        await updateProjectConfig(project.id, configUpdate);
+      } catch { /* non-critical */ }
+    } catch (err) {
+      console.warn(`[Deploy]   LLM env analysis skipped: ${(err as Error).message}`);
+    }
+
     // ── Monorepo: inject sibling backend URLs for frontend services ──
     const projectGroup = project.config?.projectGroup as string | undefined;
     const serviceRole = project.config?.serviceRole as string | undefined;
     if (projectGroup && serviceRole === 'frontend') {
-      currentStep = 'Step 2d: Resolve monorepo sibling URLs';
+      currentStep = 'Step 2d: Wait for backend siblings & resolve URLs';
       console.log(`[Deploy] ${currentStep}...`);
-      try {
-        const allProjects = await listProjects();
-        const siblings = allProjects.filter(p =>
-          (p.config?.projectGroup as string) === projectGroup && p.id !== project.id
-        );
-        for (const sibling of siblings) {
-          const siblingRole = sibling.config?.serviceRole as string;
-          if (siblingRole === 'backend') {
-            // Prefer custom domain over Cloud Run URL for sibling backend
-            const siblingCustomDomain = sibling.config?.customDomain as string | undefined;
-            const siblingFqdn = siblingCustomDomain && cfZoneName
-              ? `https://${siblingCustomDomain}.${cfZoneName}`
-              : undefined;
-            const siblingDeploys = await getDeploymentsByProject(sibling.id);
-            const liveDeploy = siblingDeploys.find(d => d.cloudRunUrl);
-            const fallbackUrl = liveDeploy?.cloudRunUrl ?? undefined;
-            if (siblingFqdn || fallbackUrl) {
-              const backendUrl = siblingFqdn || fallbackUrl!;
-              console.log(`[Deploy]   Found sibling backend URL: ${backendUrl} (from ${sibling.name}${siblingFqdn ? ', custom domain' : ''})`);
-              // Inject into common API URL env vars
-              const apiUrlKeys = ['VITE_API_URL', 'NEXT_PUBLIC_API_URL', 'REACT_APP_API_URL',
-                                  'NUXT_PUBLIC_API_URL', 'API_URL', 'BACKEND_URL', 'API_BASE_URL'];
-              for (const key of apiUrlKeys) {
-                // Inject if: var is referenced in source, OR source wasn't available (always inject for safety)
-                const { existsSync: efs } = await import('node:fs');
-                const sourceUnavailable = !projectDir || !efs(projectDir);
-                if (!userEnvVars[key] && (finalEnvVars[key] !== undefined || envDetection.missing.includes(key) || sourceUnavailable)) {
-                  finalEnvVars[key] = backendUrl;
-                  console.log(`[Deploy]   Injected ${key} = ${backendUrl}`);
-                }
-              }
-            } else {
-              console.warn(`[Deploy]   Sibling backend "${sibling.name}" has no deployment URL yet`);
+
+      // Wait for backend siblings to finish deploying (they were submitted first)
+      const maxWaitMs = 8 * 60 * 1000; // 8 minutes
+      const pollIntervalMs = 10_000;   // 10 seconds
+      const startWait = Date.now();
+      let backendUrl: string | undefined;
+
+      while (Date.now() - startWait < maxWaitMs) {
+        try {
+          const allProjects = await listProjects();
+          const backendSiblings = allProjects.filter(p =>
+            (p.config?.projectGroup as string) === projectGroup &&
+            p.id !== project.id &&
+            (p.config?.serviceRole as string) === 'backend'
+          );
+
+          let allBackendsReady = true;
+          for (const backend of backendSiblings) {
+            // Check if backend stored its URL in config (set by backend's post-deploy hook)
+            const resolvedUrl = backend.config?.resolvedBackendUrl as string | undefined;
+            if (resolvedUrl) {
+              backendUrl = resolvedUrl;
+              console.log(`[Deploy]   Backend "${backend.name}" ready: ${resolvedUrl}`);
+              continue;
+            }
+            // Fallback: check deployment records
+            const deploys = await getDeploymentsByProject(backend.id);
+            const liveDeploy = deploys.find(d => d.cloudRunUrl);
+            if (liveDeploy?.cloudRunUrl) {
+              backendUrl = liveDeploy.cloudRunUrl;
+              console.log(`[Deploy]   Backend "${backend.name}" ready: ${liveDeploy.cloudRunUrl}`);
+              continue;
+            }
+            allBackendsReady = false;
+            break;
+          }
+
+          if (allBackendsReady && backendSiblings.length > 0) break;
+          if (backendSiblings.length === 0) break;
+
+        } catch (err) {
+          console.warn(`[Deploy]   Backend poll error: ${(err as Error).message}`);
+        }
+
+        const elapsed = Math.round((Date.now() - startWait) / 1000);
+        console.log(`[Deploy]   Waiting for backend siblings... (${elapsed}s / ${maxWaitMs / 1000}s)`);
+        await new Promise(r => setTimeout(r, pollIntervalMs));
+      }
+
+      if (backendUrl) {
+        // Also check for custom domain override
+        try {
+          const allProjects = await listProjects();
+          const backendSibling = allProjects.find(p =>
+            (p.config?.projectGroup as string) === projectGroup &&
+            p.id !== project.id &&
+            (p.config?.serviceRole as string) === 'backend'
+          );
+          if (backendSibling) {
+            const siblingCustomDomain = backendSibling.config?.customDomain as string | undefined;
+            if (siblingCustomDomain && cfZoneName) {
+              backendUrl = `https://${siblingCustomDomain}.${cfZoneName}`;
             }
           }
+        } catch { /* use Cloud Run URL */ }
+
+        console.log(`[Deploy]   Injecting backend URL into frontend env vars: ${backendUrl}`);
+        const apiUrlKeys = ['VITE_API_URL', 'NEXT_PUBLIC_API_URL', 'REACT_APP_API_URL',
+                            'NUXT_PUBLIC_API_URL', 'API_URL', 'BACKEND_URL', 'API_BASE_URL'];
+        for (const key of apiUrlKeys) {
+          const { existsSync: efs } = await import('node:fs');
+          const sourceUnavailable = !projectDir || !efs(projectDir);
+          if (!userEnvVars[key] && (finalEnvVars[key] !== undefined || envDetection.missing.includes(key) || sourceUnavailable)) {
+            finalEnvVars[key] = backendUrl;
+            console.log(`[Deploy]   Injected ${key} = ${backendUrl}`);
+          }
         }
-      } catch (err) {
-        console.warn(`[Deploy]   Sibling URL resolution failed: ${(err as Error).message}`);
+      } else {
+        console.warn(`[Deploy]   ⚠ No backend sibling URL found after waiting — frontend API calls may fail`);
       }
     }
 
@@ -357,6 +449,72 @@ export async function runDeployPipeline(
       await updateProjectConfig(project.id, updatedConfig);
     } catch (err) {
       console.warn(`[Deploy]   Failed to cache lastDeployedImage: ${(err as Error).message}`);
+    }
+
+    // ── Monorepo: backend notifies frontend siblings of its URL ──
+    if (projectGroup && serviceRole === 'backend' && deployResult.serviceUrl) {
+      try {
+        // Store our URL in config so frontend siblings can find it
+        const backendConfig = {
+          ...(project.config ?? {}),
+          resolvedBackendUrl: deployResult.serviceUrl,
+          lastDeployedImage: buildResult.imageUri,
+        };
+        await updateProjectConfig(project.id, backendConfig);
+        console.log(`[Deploy]   Stored resolvedBackendUrl for frontend siblings: ${deployResult.serviceUrl}`);
+
+        // If a frontend sibling already deployed, hot-update its runtime env vars
+        const allProjects = await listProjects();
+        const frontendSiblings = allProjects.filter(p =>
+          (p.config?.projectGroup as string) === projectGroup &&
+          p.id !== project.id &&
+          (p.config?.serviceRole as string) === 'frontend'
+        );
+        for (const frontend of frontendSiblings) {
+          const frontendDeploys = await getDeploymentsByProject(frontend.id);
+          const liveFrontend = frontendDeploys.find(d => d.cloudRunService);
+          if (liveFrontend?.cloudRunService) {
+            console.log(`[Deploy]   Hot-updating frontend "${frontend.name}" runtime env vars with backend URL`);
+            // Update runtime env vars (helps server-side rendering; client-side NEXT_PUBLIC_* needs rebuild)
+            try {
+              const updateUrl = `https://run.googleapis.com/v2/projects/${gcpProject}/locations/${gcpRegion}/services/${liveFrontend.cloudRunService}`;
+              const svcRes = await (await import('./gcp-auth')).gcpFetch(updateUrl);
+              if (svcRes.ok) {
+                const svc = await svcRes.json() as { template?: { containers?: Array<{ env?: Array<{ name: string; value: string }> }> } };
+                const existingEnv = svc.template?.containers?.[0]?.env ?? [];
+                const urlKeys = ['API_URL', 'BACKEND_URL', 'NEXT_PUBLIC_API_URL', 'VITE_API_URL', 'REACT_APP_API_URL'];
+                const updatedEnv = existingEnv.map(e =>
+                  urlKeys.includes(e.name) ? { ...e, value: deployResult.serviceUrl! } : e
+                );
+                // Also add keys that don't exist yet
+                for (const key of urlKeys) {
+                  if (!updatedEnv.find(e => e.name === key)) {
+                    updatedEnv.push({ name: key, value: deployResult.serviceUrl! });
+                  }
+                }
+                const patchRes = await (await import('./gcp-auth')).gcpFetch(updateUrl, {
+                  method: 'PATCH',
+                  body: JSON.stringify({
+                    template: {
+                      ...svc.template,
+                      containers: [{ ...svc.template?.containers?.[0], env: updatedEnv }],
+                    },
+                  }),
+                });
+                if (patchRes.ok) {
+                  console.log(`[Deploy]   Frontend "${frontend.name}" env vars updated with backend URL`);
+                } else {
+                  console.warn(`[Deploy]   Frontend env update failed: HTTP ${patchRes.status}`);
+                }
+              }
+            } catch (patchErr) {
+              console.warn(`[Deploy]   Frontend hot-update failed: ${(patchErr as Error).message}`);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[Deploy]   Backend→frontend notification failed: ${(err as Error).message}`);
+      }
     }
 
     // Post-deploy: update URL-based env vars now that Cloud Run URL is known

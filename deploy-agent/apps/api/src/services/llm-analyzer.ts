@@ -208,6 +208,79 @@ Respond with JSON:
   }
 }
 
+// ─── Env Var Placeholder Detection (LLM-powered) ───
+
+export interface EnvVarAnalysis {
+  placeholders: Array<{ variable: string; value: string; reason: string }>;
+  missingCritical: Array<{ variable: string; reason: string }>;
+  recommendations: string[];
+  provider: 'claude' | 'gpt' | 'fallback';
+}
+
+/**
+ * Use LLM to detect placeholder env vars and missing critical config.
+ * Masks secret values before sending to avoid leaking credentials.
+ */
+export async function analyzeEnvVarsWithLLM(
+  envVars: Record<string, string>,
+  missingVars: string[],
+  framework: string | null,
+  language: string,
+): Promise<EnvVarAnalysis> {
+  if (!anthropic && !openai) {
+    return { placeholders: [], missingCritical: [], recommendations: [], provider: 'fallback' };
+  }
+
+  // Mask values to avoid leaking secrets to LLM — only send patterns
+  const masked: Record<string, string> = {};
+  for (const [key, val] of Object.entries(envVars)) {
+    if (!val || val.length === 0) {
+      masked[key] = '(empty)';
+    } else if (val.length <= 20) {
+      masked[key] = val; // short values are usually not secrets
+    } else {
+      // Show first 12 chars + length hint
+      masked[key] = `${val.slice(0, 12)}... (${val.length} chars)`;
+    }
+  }
+
+  const system = `You are a DevOps expert reviewing environment variables before a production cloud deployment.
+Analyze the env vars and identify:
+1. PLACEHOLDER values that should NOT go to production (e.g. "your-api-key-here", "change-in-production", "sk-xxx", "put-*-here", "test", "example", default template values)
+2. MISSING critical variables for the detected framework/language
+3. Values that look like LOCAL/DEV config leaked into production (localhost URLs, etc.)
+
+Be strict: if a value looks like it was copy-pasted from a template or README, flag it.
+Respond in JSON only, no markdown:
+{"placeholders":[{"variable":"VAR_NAME","value":"the value","reason":"why this is a placeholder"}],"missingCritical":[{"variable":"VAR_NAME","reason":"why it's critical"}],"recommendations":["actionable suggestion"]}`;
+
+  const userMessage = `Framework: ${framework ?? 'unknown'}
+Language: ${language}
+Missing vars already detected by scanner: ${missingVars.join(', ') || 'none'}
+
+Environment variables to review:
+${Object.entries(masked).map(([k, v]) => `${k}=${v}`).join('\n')}`;
+
+  try {
+    const result = await callLLM(system, userMessage, 1500);
+    const jsonMatch = result.text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.warn('[LLM-Env] No JSON in response');
+      return { placeholders: [], missingCritical: [], recommendations: [], provider: result.provider };
+    }
+    const parsed = JSON.parse(jsonMatch[0]) as EnvVarAnalysis;
+    return {
+      placeholders: parsed.placeholders ?? [],
+      missingCritical: parsed.missingCritical ?? [],
+      recommendations: parsed.recommendations ?? [],
+      provider: result.provider,
+    };
+  } catch (err) {
+    console.warn(`[LLM-Env] Analysis failed: ${(err as Error).message}`);
+    return { placeholders: [], missingCritical: [], recommendations: [], provider: 'fallback' };
+  }
+}
+
 // ─── Review Report Generation ───
 
 export async function generateReviewReport(

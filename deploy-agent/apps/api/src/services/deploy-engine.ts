@@ -206,6 +206,8 @@ export async function deployToCloudRun(config: DeployConfig, imageUri: string): 
         },
       });
       volumeMounts.push({ name: 'cloudsql', mountPath: '/cloudsql' });
+      // Belt-and-suspenders: also set the annotation (some configs need it for networking)
+      templateAnnotations['run.googleapis.com/cloudsql-instances'] = instanceStr;
       console.log(`[Deploy]   CloudSQL volume: ${JSON.stringify(volumes[volumes.length - 1])}`);
       console.log(`[Deploy]   CloudSQL connection: ${instanceStr} (type: ${typeof instanceStr})`);
     }
@@ -228,6 +230,7 @@ export async function deployToCloudRun(config: DeployConfig, imageUri: string): 
 
     const serviceSpec = {
       template: {
+        annotations: Object.keys(templateAnnotations).length > 0 ? templateAnnotations : undefined,
         containers: [
           {
             image: imageUri,

@@ -329,6 +329,9 @@ export async function projectRoutes(app: FastifyInstance) {
         projectName: `${name.trim()}-${d}`,
       }));
 
+      // Sort: backends deploy first so frontend can resolve the backend URL
+      siblings.sort((a, b) => (a.role === 'backend' ? -1 : 1) - (b.role === 'backend' ? -1 : 1));
+
       for (const svc of siblings) {
         const serviceDir = join(projectDir, svc.dirName);
         const svcSlug = svc.projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
