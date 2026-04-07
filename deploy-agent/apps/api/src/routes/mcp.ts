@@ -114,6 +114,22 @@ async function handleToolCall(call: MCPToolCall): Promise<MCPToolResult> {
   try {
     switch (call.name) {
       case 'submit_project': {
+        // ─── Validate ALL required fields BEFORE doing anything ───
+        const missingFields: string[] = [];
+        if (!call.arguments.source) missingFields.push('source (專案來源類型: local_path, git_url, 或 upload)');
+        if (!call.arguments.path_or_url) missingFields.push('path_or_url (專案路徑或 Git URL)');
+        if (!call.arguments.project_name) missingFields.push('project_name (專案名稱，英文小寫)');
+        if (!call.arguments.custom_domain || !(call.arguments.custom_domain as string).trim()) {
+          missingFields.push('custom_domain (自訂網域，例如 "my-app" → my-app.punwave.com)');
+        }
+        if (missingFields.length > 0) {
+          return error(
+            `缺少必填欄位，請向使用者詢問以下資訊後再重試：\n` +
+            missingFields.map((f, i) => `  ${i + 1}. ${f}`).join('\n') +
+            `\n\n⚠️ 不要猜測這些值，必須由使用者明確提供。`
+          );
+        }
+
         // If db_dump_path is provided, upload it to GCS
         let gcsDbDumpUri: string | undefined;
         let dbDumpFileName: string | undefined;

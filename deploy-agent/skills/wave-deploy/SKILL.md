@@ -19,20 +19,58 @@ description: |
 
 ---
 
+## ⛔ 必讀規則：不要猜、不要跳過、必須問使用者
+
+> **鐵律：如果以下任何必填欄位使用者沒有明確提供，你必須停下來詢問使用者，絕對不要自己猜測或填入預設值。**
+>
+> 違反這個規則 = 部署失敗 + 浪費 GCP 資源 + 使用者會生氣。
+
+---
+
 ## 完整流程
 
-### Step 1: 確認專案資訊
+### Step 0: 收集必填資訊（🚫 不可跳過）
 
-向使用者確認以下資訊（如果尚未提供）：
+在執行任何 API 呼叫之前，你**必須**確認以下所有必填欄位都已由使用者明確提供。
 
-| 欄位 | 必填 | 說明 | 範例 |
-|------|------|------|------|
-| 專案來源 | 是 | 本地目錄路徑、壓縮檔路徑(.tar.gz/.tgz/.zip)、或 Git URL | `/path/to/project` |
-| 專案名稱 | 否 | 不填則從目錄名或檔名推斷 | `my-app` |
-| 自訂網域 | 否 | 不填則只用 Cloud Run URL | `my-app` |
-| 環境變數 | 否 | key=value 格式，可多筆 | `DATABASE_URL=postgres://...` |
+| 欄位 | 必填 | 說明 | 範例 | 缺少時的行為 |
+|------|------|------|------|------------|
+| 專案來源 | ✅ 必填 | 本地目錄路徑、壓縮檔路徑(.tar.gz/.tgz/.zip)、或 Git URL | `/path/to/project` | ❌ 必須問使用者 |
+| 專案名稱 | ✅ 必填 | 英文、小寫、可含連字號 | `my-app` | ❌ 必須問使用者（不要從路徑猜） |
+| 自訂網域 | ✅ 必填 | 會變成 `{subdomain}.punwave.com` | `my-app` | ❌ 必須問使用者 |
+| 環境變數 | 選填 | key=value 格式，可多筆 | `DATABASE_URL=postgres://...` | ✅ 可跳過不問 |
 
-### Step 2: 打包並上傳
+**執行步驟：**
+
+1. 檢查使用者的訊息，列出已提供和尚未提供的必填欄位
+2. 如果有任何必填欄位缺少，**立刻停下來**，用以下格式詢問：
+
+```
+要幫你潮部署，我需要確認幾個資訊：
+
+1. 📁 專案來源：[已提供 / ❓ 請提供本地路徑、壓縮檔路徑、或 Git URL]
+2. 📛 專案名稱：[已提供 / ❓ 你想叫什麼名字？(英文小寫，例如 my-app)]
+3. 🌐 自訂網域：[已提供 / ❓ 你想用什麼子網域？(例如 my-app → my-app.punwave.com)]
+4. 🔐 環境變數：(選填) 有需要設定的環境變數嗎？
+
+請提供缺少的資訊，我就開始部署！
+```
+
+3. **所有必填欄位都齊全後**，才能進入 Step 1
+
+> ⚠️ 再次強調：**絕對不要**在缺少必填欄位的情況下呼叫 submit_project 或 upload API。
+> 如果你在 Step 0 發現缺少欄位卻直接跳到 Step 1，你就搞砸了。
+
+---
+
+### Step 1: 打包並上傳
+
+**前置確認**（心理 checklist，不需顯示給使用者）：
+- [ ] 專案來源 ✅ 已確認
+- [ ] 專案名稱 ✅ 已確認
+- [ ] 自訂網域 ✅ 已確認
+
+如果上面任何一項打不了勾，**回到 Step 0**。
 
 根據來源類型選擇對應方式：
 
@@ -71,7 +109,7 @@ curl -s -X POST "https://wave-deploy-agent-api.punwave.com/api/projects/upload" 
 
 記下所有回傳的 `project.id`。
 
-### Step 3: 等待掃描完成
+### Step 2: 等待掃描完成
 
 每 15 秒輪詢狀態，直到所有 project 都變成 `review_pending`（或 `failed`）：
 
@@ -90,7 +128,7 @@ curl -s "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID" \
 curl -s -X POST "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID/skip-scan"
 ```
 
-### Step 4: 查看掃描報告
+### Step 3: 查看掃描報告
 
 ```bash
 curl -s "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID/detail" | python3 -m json.tool
@@ -107,7 +145,7 @@ curl -s "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID/detai
 報告下載：https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID/scan/report
 ```
 
-### Step 5: 通過審查（觸發部署）
+### Step 4: 通過審查（觸發部署）
 
 先查找待審查的 review ID：
 ```bash
@@ -128,7 +166,7 @@ curl -s -X POST "https://wave-deploy-agent-api.punwave.com/api/reviews/REVIEW_ID
 
 **Monorepo 部署順序很重要：** 先 approve backend，等它部署完成後再 approve frontend（這樣 frontend build 時才能注入正確的 backend URL）。
 
-### Step 6: 等待部署完成
+### Step 5: 等待部署完成
 
 每 15 秒輪詢，直到狀態變為 `live`、`ssl_provisioning`、或 `failed`：
 ```bash
@@ -144,7 +182,7 @@ curl -s "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID" \
 - `live` → 「潮部署完成！專案已上線！」
 - `failed` → 「部署失敗」
 
-### Step 7: 回報最終結果
+### Step 6: 回報最終結果
 
 ```bash
 curl -s "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID/detail" | python3 -c "
@@ -184,7 +222,12 @@ for p in d.get('projects', []):
 ```bash
 curl -s -X POST "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID/resubmit"
 ```
-然後回到 Step 3 繼續流程。
+然後回到 Step 2 繼續流程。
+
+### 重試網域對應（domain mapping 失敗時）
+```bash
+curl -s -X POST "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID/retry-domain"
+```
 
 ### 下載安全掃描報告
 ```bash
@@ -195,6 +238,20 @@ curl -s "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID/scan/
 ```bash
 curl -s -X DELETE "https://wave-deploy-agent-api.punwave.com/api/projects/PROJECT_ID"
 ```
+
+---
+
+## 網域衝突處理
+
+上傳時如果收到 HTTP 409 回應，表示自訂網域已被其他服務佔用：
+
+```json
+{"error": "domain_conflict", "message": "Domain \"xxx.punwave.com\" is already mapped to service \"da-xxx\". Set forceDomain=true to override."}
+```
+
+此時應告知使用者，並詢問是否要：
+1. 換一個不同的子網域
+2. 強制覆蓋（加上 `-F "forceDomain=true"`）
 
 ---
 
