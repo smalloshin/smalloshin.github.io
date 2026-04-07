@@ -18,10 +18,11 @@ import {
   getDeploymentsByProject,
   deleteProjectFromDb,
   updateProjectConfig,
+  updateDeployment,
 } from '../services/orchestrator';
 import { runPipeline } from '../services/pipeline-worker';
 import { deleteService, deleteDomainMapping, deleteContainerImage, updateServiceEnvVars, getServiceEnvVars } from '../services/deploy-engine';
-import { deleteCname } from '../services/dns-manager';
+import { deleteCname, setupCustomDomainWithDns, type DnsConfig } from '../services/dns-manager';
 import { stopProjectService, startProjectService } from '../services/service-lifecycle';
 
 const execFileAsync = promisify(execFile);
@@ -1050,5 +1051,75 @@ export async function projectRoutes(app: FastifyInstance) {
 
     // Stream the body to the client
     return reply.send(gcsResp.body);
+  });
+
+  // Retry custom domain setup for a project that previously failed domain mapping
+  app.post<{ Params: { id: string } }>('/api/projects/:id/retry-domain', async (request, reply) => {
+    const project = await getProject(request.params.id);
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    const customDomain = project.config?.customDomain as string | undefined;
+    if (!customDomain) return reply.status(400).send({ error: 'No customDomain configured for this project' });
+
+    // Determine the Cloud Run service name (da-{slug})
+    const deployments = await getDeploymentsByProject(project.id);
+    const latestDeploy = deployments[0];
+    const serviceName = latestDeploy?.cloudRunService ?? `da-${project.slug}`;
+
+    const cfToken = process.env.CLOUDFLARE_TOKEN || '';
+    const cfZoneId = process.env.CLOUDFLARE_ZONE_ID || '';
+    const cfZoneName = process.env.CLOUDFLARE_ZONE_NAME || 'punwave.com';
+
+    if (!cfToken || !cfZoneId) {
+      return reply.status(500).send({ error: 'Cloudflare not configured on server' });
+    }
+
+    // Build the subdomain (customDomain may be "luca2-app" or "api.luca2")
+    const subdomain = customDomain.replace(`.${cfZoneName}`, '');
+
+    const dnsConfig: DnsConfig = {
+      cloudflareToken: cfToken,
+      zoneId: cfZoneId,
+      subdomain,
+      zoneName: cfZoneName,
+    };
+
+    const forceDomain = Boolean(project.config?.forceDomain);
+    console.log(`[retry-domain] Retrying domain for ${project.slug}: ${subdomain}.${cfZoneName} → service ${serviceName}`);
+
+    const domainResult = await setupCustomDomainWithDns(
+      dnsConfig,
+      latestDeploy?.cloudRunUrl ?? '',
+      GCP_PROJECT,
+      GCP_REGION,
+      serviceName,
+      { force: forceDomain }
+    );
+
+    if (domainResult.success) {
+      const fqdn = `${subdomain}.${cfZoneName}`;
+      // Clear domain error and update deployment
+      const updatedConfig = { ...project.config };
+      delete (updatedConfig as Record<string, unknown>).domainError;
+      delete (updatedConfig as Record<string, unknown>).domainErrorAt;
+      await updateProjectConfig(project.id, updatedConfig as Record<string, unknown>);
+
+      if (latestDeploy) {
+        await updateDeployment(latestDeploy.id, { customDomain: fqdn, sslStatus: 'provisioning' });
+      }
+
+      return {
+        success: true,
+        fqdn,
+        customUrl: domainResult.customUrl,
+        message: `Domain ${fqdn} mapped successfully. SSL will provision in 5-15 minutes.`,
+      };
+    } else {
+      return reply.status(500).send({
+        success: false,
+        error: domainResult.error,
+        conflict: domainResult.conflict,
+      });
+    }
   });
 }
